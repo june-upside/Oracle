@@ -55,7 +55,8 @@ def update_prices():
                 upbit_eth_krw=prices['upbit_eth_krw'],
                 upbit_usdt_krw=prices['upbit_usdt_krw'],
                 overseas_eth_usdt=prices['overseas_eth_usdt'],
-                use_manual_usdt_krw=oracle.manual_usdt_krw_override is not None
+                use_manual_usdt_krw=oracle.manual_usdt_krw_override is not None,
+                use_manual_eth_krw=oracle.manual_eth_krw_override is not None
             )
             
             timestamp = datetime.now().isoformat()
@@ -171,6 +172,29 @@ def get_manual_usdt_krw():
     manual_price = oracle.get_manual_usdt_krw()
     return jsonify({'manual_price': manual_price})
 
+@app.route('/api/eth-krw/manual', methods=['POST'])
+def set_manual_eth_krw():
+    """ETH/KRW 수동 가격 설정"""
+    data = request.get_json()
+    price = data.get('price')
+    
+    if price is None:
+        oracle.set_manual_eth_krw(None)
+        return jsonify({'success': True, 'message': '수동 가격 해제됨'})
+    
+    try:
+        price = float(price)
+        oracle.set_manual_eth_krw(price)
+        return jsonify({'success': True, 'message': f'ETH/KRW 가격이 {price}로 설정됨'})
+    except ValueError:
+        return jsonify({'success': False, 'message': '잘못된 가격 형식'}), 400
+
+@app.route('/api/eth-krw/manual', methods=['GET'])
+def get_manual_eth_krw():
+    """ETH/KRW 수동 가격 조회"""
+    manual_price = oracle.get_manual_eth_krw()
+    return jsonify({'manual_price': manual_price})
+
 @app.route('/api/oracle/update', methods=['POST'])
 def force_update():
     """수동으로 가격 업데이트 강제 실행"""
@@ -180,7 +204,8 @@ def force_update():
             upbit_eth_krw=prices['upbit_eth_krw'],
             upbit_usdt_krw=prices['upbit_usdt_krw'],
             overseas_eth_usdt=prices['overseas_eth_usdt'],
-            use_manual_usdt_krw=oracle.manual_usdt_krw_override is not None
+            use_manual_usdt_krw=oracle.manual_usdt_krw_override is not None,
+            use_manual_eth_krw=oracle.manual_eth_krw_override is not None
         )
         
         timestamp = datetime.now().isoformat()

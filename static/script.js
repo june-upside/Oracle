@@ -1,5 +1,6 @@
 // 전역 변수
 let manualUsdtKrwPrice = null;
+let manualEthKrwPrice = null;
 let priceChart = null;
 let socket = null;
 
@@ -303,6 +304,31 @@ function updateDashboard(data) {
         methodEl.textContent = 'No Data';
         methodEl.style.color = '#999';
     }
+    
+    // ETH/KRW 정보 업데이트
+    // Upbit 가격 표시 (수동 가격이 있으면 수동 가격, 없으면 실제 가격)
+    const hasManualEthKrw = oracle_result.price_details && 
+        oracle_result.price_details.some(([name]) => name === 'upbit (manual)');
+    const upbitEthKrwToShow = hasManualEthKrw 
+        ? oracle_result.price_details.find(([name]) => name === 'upbit (manual)')?.[1]
+        : prices.upbit_eth_krw;
+    document.getElementById('upbit-eth-krw-info').textContent = formatCurrency(upbitEthKrwToShow);
+    document.getElementById('median-eth-krw-info').textContent = formatCurrency(oracle_result.median_price);
+    
+    const ethKrwMethodEl = document.getElementById('eth-krw-method');
+    if (hasManualEthKrw) {
+        ethKrwMethodEl.textContent = 'Upbit 수동 조작';
+        ethKrwMethodEl.style.color = '#ffc107';
+    } else if (oracle_result.calculation_method === 'normal') {
+        ethKrwMethodEl.textContent = 'Normal Mode';
+        ethKrwMethodEl.style.color = '#4caf50';
+    } else if (oracle_result.calculation_method === 'inverse') {
+        ethKrwMethodEl.textContent = 'Inverse Mode';
+        ethKrwMethodEl.style.color = '#dc3545';
+    } else {
+        ethKrwMethodEl.textContent = '-';
+        ethKrwMethodEl.style.color = '#999';
+    }
 
     // 타임스탬프
     document.getElementById('price-timestamp').textContent = formatTimestamp(data.timestamp);
@@ -479,6 +505,106 @@ async function checkManualPrice() {
     }
 }
 
+// ETH/KRW 게이지 이벤트
+function setupEthKrwGauge() {
+    const gauge = document.getElementById('eth-krw-gauge');
+    const gaugeValueDisplay = document.getElementById('eth-gauge-value-display');
+    const resetBtn = document.getElementById('reset-eth-gauge');
+    const applyBtn = document.getElementById('apply-eth-gauge');
+    const gaugeStatus = document.getElementById('eth-gauge-status');
+
+    // 게이지 값 변경 시 표시 업데이트
+    gauge.addEventListener('input', (e) => {
+        gaugeValueDisplay.textContent = formatNumber(parseFloat(e.target.value));
+    });
+
+    // 리셋 버튼
+    resetBtn.addEventListener('click', async () => {
+        manualEthKrwPrice = null;
+        gaugeStatus.textContent = '자동 모드';
+        gaugeStatus.className = 'gauge-status auto';
+        
+        // 서버에 수동 가격 해제 요청
+        try {
+            const response = await fetch('/api/eth-krw/manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ price: null }),
+            });
+            
+            const result = await response.json();
+            console.log(result.message);
+            
+            // 수동 업데이트 트리거 (서버에서 웹소켓으로 브로드캐스트됨)
+            if (socket && socket.connected) {
+                // 웹소켓 연결된 경우 서버에서 자동으로 업데이트가 브로드캐스트됨
+                // 필요시 수동 업데이트 API 호출
+                fetch('/api/oracle/update', { method: 'POST' });
+            }
+        } catch (error) {
+            console.error('리셋 실패:', error);
+        }
+    });
+
+    // 적용 버튼
+    applyBtn.addEventListener('click', async () => {
+        const price = parseFloat(gauge.value);
+        manualEthKrwPrice = price;
+        gaugeStatus.textContent = `수동 모드: ${formatNumber(price)} KRW`;
+        gaugeStatus.className = 'gauge-status manual';
+        
+        // 서버에 수동 가격 설정 요청
+        try {
+            const response = await fetch('/api/eth-krw/manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ price: price }),
+            });
+            
+            const result = await response.json();
+            console.log(result.message);
+            
+            // 수동 업데이트 트리거 (서버에서 웹소켓으로 브로드캐스트됨)
+            if (socket && socket.connected) {
+                // 웹소켓 연결된 경우 서버에서 자동으로 업데이트가 브로드캐스트됨
+                // 필요시 수동 업데이트 API 호출
+                fetch('/api/oracle/update', { method: 'POST' });
+            }
+        } catch (error) {
+            console.error('적용 실패:', error);
+        }
+    });
+
+    // 초기 수동 가격 상태 확인
+    checkManualEthPrice();
+}
+
+// ETH/KRW 수동 가격 상태 확인
+async function checkManualEthPrice() {
+    try {
+        const response = await fetch('/api/eth-krw/manual');
+        const data = await response.json();
+        
+        if (data.manual_price !== null) {
+            manualEthKrwPrice = data.manual_price;
+            const gauge = document.getElementById('eth-krw-gauge');
+            const gaugeValueDisplay = document.getElementById('eth-gauge-value-display');
+            const gaugeStatus = document.getElementById('eth-gauge-status');
+            
+            gauge.value = data.manual_price;
+            gaugeValueDisplay.textContent = formatNumber(data.manual_price);
+            gaugeStatus.textContent = `수동 모드: ${formatNumber(data.manual_price)} KRW`;
+            gaugeStatus.className = 'gauge-status manual';
+        }
+    } catch (error) {
+        console.error('수동 가격 확인 실패:', error);
+    }
+}
+
 // 다크모드 설정
 function setupDarkMode() {
     const toggleInput = document.getElementById('dark-mode-toggle-input');
@@ -546,6 +672,7 @@ function updateChartColors(isDark) {
 // 초기화
 document.addEventListener('DOMContentLoaded', () => {
     setupUsdtKrwGauge();
+    setupEthKrwGauge();
     
     // 다크모드 설정
     setupDarkMode();
