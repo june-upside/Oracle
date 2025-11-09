@@ -96,9 +96,27 @@ class PriceFetcher:
     def _process_upbit_ticker(self, data: dict):
         """업비트 티커 데이터 처리"""
         try:
-            code = data['code']
-            price = float(data['trade_price'])
-            timestamp = time.time()
+            # 레퍼런스에 따라 필드명 확인 (trade_price 또는 tp)
+            code = data.get('code') or data.get('cd')
+            if not code:
+                return
+            
+            # trade_price 또는 tp 필드에서 가격 가져오기
+            price = data.get('trade_price') or data.get('tp')
+            if price is None:
+                return
+            
+            price = float(price)
+            
+            # 타임스탬프는 tms (ms) 또는 timestamp 사용, 없으면 현재 시간
+            timestamp_ms = data.get('timestamp') or data.get('tms')
+            if timestamp_ms:
+                timestamp = float(timestamp_ms) / 1000.0  # ms를 초로 변환
+            else:
+                timestamp = time.time()
+            
+            # stream_type 확인 (SNAPSHOT 또는 REALTIME)
+            stream_type = data.get('stream_type') or data.get('st', 'REALTIME')
             
             with self.upbit_ws_lock:
                 if code == 'KRW-ETH':
@@ -107,8 +125,8 @@ class PriceFetcher:
                 elif code == 'KRW-USDT':
                     self.price_cache['upbit_usdt_krw'] = price
                     self.cache_timestamp['upbit_usdt_krw'] = timestamp
-        except Exception as e:
-            print(f"업비트 티커 데이터 처리 오류: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"업비트 티커 데이터 처리 오류: {e}, 데이터: {data}")
     
     def _init_upbit_websocket(self):
         """업비트 웹소켓 초기화 및 연결"""
@@ -119,29 +137,24 @@ class PriceFetcher:
             """웹소켓 메시지 수신 핸들러"""
             try:
                 # 업비트 웹소켓은 JSON 문자열을 보냄
+                # 레퍼런스에 따르면 단일 객체 또는 배열 형식 가능
                 data = json.loads(message)
                 
-                # 배열 형식일 수도 있고, 단일 객체일 수도 있음
+                # 배열 형식인 경우
                 if isinstance(data, list):
                     for item in data:
-                        if isinstance(item, dict) and 'code' in item and 'trade_price' in item:
-                            self._process_upbit_ticker(item)
-                elif isinstance(data, dict) and 'code' in data and 'trade_price' in data:
-                    self._process_upbit_ticker(data)
-            except json.JSONDecodeError:
-                # 바이너리 형식일 수 있음 (압축된 경우)
-                try:
-                    import gzip
-                    decompressed = gzip.decompress(message).decode('utf-8')
-                    data = json.loads(decompressed)
-                    if isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict) and 'code' in item and 'trade_price' in item:
+                        if isinstance(item, dict):
+                            # type이 ticker인 경우만 처리
+                            item_type = item.get('type') or item.get('ty')
+                            if item_type == 'ticker':
                                 self._process_upbit_ticker(item)
-                    elif isinstance(data, dict) and 'code' in data and 'trade_price' in data:
+                # 단일 객체인 경우
+                elif isinstance(data, dict):
+                    data_type = data.get('type') or data.get('ty')
+                    if data_type == 'ticker':
                         self._process_upbit_ticker(data)
-                except Exception as e:
-                    print(f"업비트 웹소켓 메시지 압축 해제 오류: {e}")
+            except json.JSONDecodeError as e:
+                print(f"업비트 웹소켓 JSON 파싱 오류: {e}")
             except Exception as e:
                 print(f"업비트 웹소켓 메시지 처리 오류: {e}")
         
@@ -151,27 +164,39 @@ class PriceFetcher:
         
         def on_close(ws, close_status_code, close_msg):
             """웹소켓 연결 종료 핸들러"""
-            print("업비트 웹소켓 연결 종료")
+            print(f"업비트 웹소켓 연결 종료 (코드: {close_status_code}, 메시지: {close_msg})")
             was_running = self.upbit_ws_running
             self.upbit_ws_running = False
+            
             # 재연결 시도 (의도적으로 종료한 경우가 아닐 때)
-            if was_running:
+            # close_status_code가 None이 아니고 정상 종료가 아닌 경우에만 재연결
+            if was_running and close_status_code != 1000:
+                print("업비트 웹소켓 재연결 시도 중...")
                 time.sleep(5)
-                self._init_upbit_websocket()
+                # 재연결 시도 (무한 루프 방지를 위해 한 번만)
+                if not self.upbit_ws_running:
+                    self._init_upbit_websocket()
         
         def on_open(ws):
             """웹소켓 연결 성공 핸들러"""
             print("업비트 웹소켓 연결 성공")
-            # 티커 구독 요청
+            # 티커 구독 요청 (레퍼런스 형식에 맞춤)
             ticket = str(uuid.uuid4())
             subscribe_message = [
                 {"ticket": ticket},
                 {
                     "type": "ticker",
-                    "codes": ["KRW-ETH", "KRW-USDT"]
+                    "codes": ["KRW-ETH", "KRW-USDT"]  # 대문자로 요청 (레퍼런스 요구사항)
+                },
+                {
+                    "format": "DEFAULT"  # 레퍼런스에 따라 format 추가
                 }
             ]
-            ws.send(json.dumps(subscribe_message))
+            try:
+                ws.send(json.dumps(subscribe_message))
+                print("업비트 티커 구독 요청 전송 완료")
+            except Exception as e:
+                print(f"업비트 티커 구독 요청 전송 실패: {e}")
         
         def run_websocket():
             """웹소켓 실행 함수"""
