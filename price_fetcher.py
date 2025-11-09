@@ -1,13 +1,22 @@
 """
 거래소 가격 데이터 수집 모듈
-CCTX를 사용하여 여러 거래소에서 가격 정보를 가져옵니다.
+업비트는 웹소켓을 사용하고, 다른 거래소는 CCXT를 사용합니다.
 병렬 처리를 통해 모든 거래소 API를 동시에 호출하여 시간 동기화 문제를 해결합니다.
 """
 import ccxt
 import time
+import json
+import threading
+import uuid
 from typing import Dict, Optional, List, Tuple
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+try:
+    import websocket
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
+    print("경고: websocket-client가 설치되지 않았습니다. 업비트 웹소켓을 사용하려면 'pip install websocket-client'를 실행하세요.")
 
 
 class PriceFetcher:
@@ -73,32 +82,163 @@ class PriceFetcher:
         self.price_cache = {}
         self.cache_timestamp = {}
         self.cache_ttl = 1  # 1초 캐시
+        
+        # 업비트 웹소켓 관련 변수
+        self.upbit_ws = None
+        self.upbit_ws_thread = None
+        self.upbit_ws_running = False
+        self.upbit_ws_lock = threading.Lock()
+        
+        # 업비트 웹소켓 초기화 (websocket-client가 있는 경우)
+        if WEBSOCKET_AVAILABLE:
+            self._init_upbit_websocket()
+    
+    def _process_upbit_ticker(self, data: dict):
+        """업비트 티커 데이터 처리"""
+        try:
+            code = data['code']
+            price = float(data['trade_price'])
+            timestamp = time.time()
+            
+            with self.upbit_ws_lock:
+                if code == 'KRW-ETH':
+                    self.price_cache['upbit_eth_krw'] = price
+                    self.cache_timestamp['upbit_eth_krw'] = timestamp
+                elif code == 'KRW-USDT':
+                    self.price_cache['upbit_usdt_krw'] = price
+                    self.cache_timestamp['upbit_usdt_krw'] = timestamp
+        except Exception as e:
+            print(f"업비트 티커 데이터 처리 오류: {e}")
+    
+    def _init_upbit_websocket(self):
+        """업비트 웹소켓 초기화 및 연결"""
+        if not WEBSOCKET_AVAILABLE:
+            return
+        
+        def on_message(ws, message):
+            """웹소켓 메시지 수신 핸들러"""
+            try:
+                # 업비트 웹소켓은 JSON 문자열을 보냄
+                data = json.loads(message)
+                
+                # 배열 형식일 수도 있고, 단일 객체일 수도 있음
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and 'code' in item and 'trade_price' in item:
+                            self._process_upbit_ticker(item)
+                elif isinstance(data, dict) and 'code' in data and 'trade_price' in data:
+                    self._process_upbit_ticker(data)
+            except json.JSONDecodeError:
+                # 바이너리 형식일 수 있음 (압축된 경우)
+                try:
+                    import gzip
+                    decompressed = gzip.decompress(message).decode('utf-8')
+                    data = json.loads(decompressed)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict) and 'code' in item and 'trade_price' in item:
+                                self._process_upbit_ticker(item)
+                    elif isinstance(data, dict) and 'code' in data and 'trade_price' in data:
+                        self._process_upbit_ticker(data)
+                except Exception as e:
+                    print(f"업비트 웹소켓 메시지 압축 해제 오류: {e}")
+            except Exception as e:
+                print(f"업비트 웹소켓 메시지 처리 오류: {e}")
+        
+        def on_error(ws, error):
+            """웹소켓 오류 핸들러"""
+            print(f"업비트 웹소켓 오류: {error}")
+        
+        def on_close(ws, close_status_code, close_msg):
+            """웹소켓 연결 종료 핸들러"""
+            print("업비트 웹소켓 연결 종료")
+            was_running = self.upbit_ws_running
+            self.upbit_ws_running = False
+            # 재연결 시도 (의도적으로 종료한 경우가 아닐 때)
+            if was_running:
+                time.sleep(5)
+                self._init_upbit_websocket()
+        
+        def on_open(ws):
+            """웹소켓 연결 성공 핸들러"""
+            print("업비트 웹소켓 연결 성공")
+            # 티커 구독 요청
+            ticket = str(uuid.uuid4())
+            subscribe_message = [
+                {"ticket": ticket},
+                {
+                    "type": "ticker",
+                    "codes": ["KRW-ETH", "KRW-USDT"]
+                }
+            ]
+            ws.send(json.dumps(subscribe_message))
+        
+        def run_websocket():
+            """웹소켓 실행 함수"""
+            ws_url = "wss://api.upbit.com/websocket/v1"
+            self.upbit_ws = websocket.WebSocketApp(
+                ws_url,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close,
+                on_open=on_open
+            )
+            self.upbit_ws_running = True
+            self.upbit_ws.run_forever()
+        
+        # 웹소켓을 별도 스레드에서 실행
+        self.upbit_ws_thread = threading.Thread(target=run_websocket, daemon=True)
+        self.upbit_ws_thread.start()
     
     def _fetch_upbit_eth_krw(self) -> Tuple[str, Optional[float], float]:
-        """업비트 ETH/KRW 가격 수집 (병렬 처리용)"""
+        """업비트 ETH/KRW 가격 수집 (웹소켓 캐시 사용 또는 폴백)"""
         timestamp = time.time()
+        
+        # 웹소켓 캐시에서 가격 가져오기
+        with self.upbit_ws_lock:
+            cached_price = self.price_cache.get('upbit_eth_krw')
+            cached_timestamp = self.cache_timestamp.get('upbit_eth_krw', 0)
+            
+            # 캐시된 가격이 있고 최근 것(5초 이내)이면 사용
+            if cached_price is not None and (timestamp - cached_timestamp) < 5:
+                return ('upbit_eth_krw', cached_price, cached_timestamp)
+        
+        # 웹소켓이 없거나 캐시가 오래된 경우 REST API 폴백
         try:
             ticker = self.upbit.fetch_ticker('ETH/KRW')
             price = float(ticker['last'])
-            self.price_cache['upbit_eth_krw'] = price
-            self.cache_timestamp['upbit_eth_krw'] = timestamp
+            with self.upbit_ws_lock:
+                self.price_cache['upbit_eth_krw'] = price
+                self.cache_timestamp['upbit_eth_krw'] = timestamp
             return ('upbit_eth_krw', price, timestamp)
         except Exception as e:
             print(f"업비트 ETH/KRW 가격 수집 실패: {e}")
-            return ('upbit_eth_krw', self.price_cache.get('upbit_eth_krw'), timestamp)
+            return ('upbit_eth_krw', cached_price, timestamp)
     
     def _fetch_upbit_usdt_krw(self) -> Tuple[str, Optional[float], float]:
-        """업비트 USDT/KRW 가격 수집 (병렬 처리용)"""
+        """업비트 USDT/KRW 가격 수집 (웹소켓 캐시 사용 또는 폴백)"""
         timestamp = time.time()
+        
+        # 웹소켓 캐시에서 가격 가져오기
+        with self.upbit_ws_lock:
+            cached_price = self.price_cache.get('upbit_usdt_krw')
+            cached_timestamp = self.cache_timestamp.get('upbit_usdt_krw', 0)
+            
+            # 캐시된 가격이 있고 최근 것(5초 이내)이면 사용
+            if cached_price is not None and (timestamp - cached_timestamp) < 5:
+                return ('upbit_usdt_krw', cached_price, cached_timestamp)
+        
+        # 웹소켓이 없거나 캐시가 오래된 경우 REST API 폴백
         try:
             ticker = self.upbit.fetch_ticker('USDT/KRW')
             price = float(ticker['last'])
-            self.price_cache['upbit_usdt_krw'] = price
-            self.cache_timestamp['upbit_usdt_krw'] = timestamp
+            with self.upbit_ws_lock:
+                self.price_cache['upbit_usdt_krw'] = price
+                self.cache_timestamp['upbit_usdt_krw'] = timestamp
             return ('upbit_usdt_krw', price, timestamp)
         except Exception as e:
             print(f"업비트 USDT/KRW 가격 수집 실패: {e}")
-            return ('upbit_usdt_krw', self.price_cache.get('upbit_usdt_krw'), timestamp)
+            return ('upbit_usdt_krw', cached_price, timestamp)
     
     def _fetch_overseas_price(self, exchange_name: str, exchange) -> Tuple[str, Optional[float], float]:
         """해외 거래소 ETH/USDT 가격 수집 (병렬 처리용)"""

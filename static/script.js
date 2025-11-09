@@ -248,21 +248,42 @@ function updateDashboard(data) {
         medianPriceEl.querySelector('.price-value').textContent = '-';
     }
     
-    // 업비트 가격과 비교 정보 표시
-    const upbitEthKrw = prices.upbit_eth_krw;
+    // 계산 방법 표시
+    const methodEl = document.getElementById('calculation-method');
+    if (oracle_result.calculation_method === 'normal') {
+        methodEl.textContent = 'Normal Mode';
+        methodEl.style.color = '#4caf50';
+    } else if (oracle_result.calculation_method === 'inverse') {
+        methodEl.textContent = 'Inverse Mode';
+        methodEl.style.color = '#dc3545';
+    } else {
+        methodEl.textContent = 'No Data';
+        methodEl.style.color = '#999';
+    }
+    
+    // ETH/KRW 정보 업데이트
+    // Upbit 가격 표시 (수동 가격이 있으면 수동 가격, 없으면 실제 가격)
+    const hasManualEthKrw = oracle_result.price_details && 
+        oracle_result.price_details.some(([name]) => name === 'upbit (manual)');
+    const upbitEthKrwToShow = hasManualEthKrw 
+        ? oracle_result.price_details.find(([name]) => name === 'upbit (manual)')?.[1]
+        : prices.upbit_eth_krw;
+    
+    // 업비트 가격과 비교 정보 표시 (조작된 가격이 있으면 조작된 가격 사용)
     const medianPrice = oracle_result.median_price;
     const priceComparisonEl = document.getElementById('price-comparison');
     const upbitPriceCompareEl = document.getElementById('upbit-price-compare');
     const priceDiffEl = document.getElementById('price-diff');
     const priceDiffPercentEl = document.getElementById('price-diff-percent');
     
-    if (upbitEthKrw !== null && upbitEthKrw !== undefined && medianPrice !== null && medianPrice !== undefined) {
-        // 업비트 가격
-        upbitPriceCompareEl.textContent = `업비트: ${formatCurrency(upbitEthKrw)}`;
+    if (upbitEthKrwToShow !== null && upbitEthKrwToShow !== undefined && medianPrice !== null && medianPrice !== undefined) {
+        // 업비트 가격 (조작된 가격이 있으면 조작된 가격 표시)
+        const upbitLabel = hasManualEthKrw ? '업비트 (조작됨)' : '업비트';
+        upbitPriceCompareEl.textContent = `${upbitLabel}: ${formatCurrency(upbitEthKrwToShow)}`;
         
         // 차이값 계산
-        const diff = medianPrice - upbitEthKrw;
-        const diffPercent = (diff / upbitEthKrw) * 100;
+        const diff = medianPrice - upbitEthKrwToShow;
+        const diffPercent = (diff / upbitEthKrwToShow) * 100;
         
         // 차이값 표시
         const diffSign = diff >= 0 ? '+' : '';
@@ -291,27 +312,6 @@ function updateDashboard(data) {
         priceDiffEl.textContent = '-';
         priceDiffPercentEl.textContent = '';
     }
-
-    // 계산 방법 표시
-    const methodEl = document.getElementById('calculation-method');
-    if (oracle_result.calculation_method === 'normal') {
-        methodEl.textContent = 'Normal Mode';
-        methodEl.style.color = '#4caf50';
-    } else if (oracle_result.calculation_method === 'inverse') {
-        methodEl.textContent = 'Inverse Mode';
-        methodEl.style.color = '#dc3545';
-    } else {
-        methodEl.textContent = 'No Data';
-        methodEl.style.color = '#999';
-    }
-    
-    // ETH/KRW 정보 업데이트
-    // Upbit 가격 표시 (수동 가격이 있으면 수동 가격, 없으면 실제 가격)
-    const hasManualEthKrw = oracle_result.price_details && 
-        oracle_result.price_details.some(([name]) => name === 'upbit (manual)');
-    const upbitEthKrwToShow = hasManualEthKrw 
-        ? oracle_result.price_details.find(([name]) => name === 'upbit (manual)')?.[1]
-        : prices.upbit_eth_krw;
     document.getElementById('upbit-eth-krw-info').textContent = formatCurrency(upbitEthKrwToShow);
     document.getElementById('median-eth-krw-info').textContent = formatCurrency(oracle_result.median_price);
     
@@ -359,6 +359,11 @@ function updateDashboard(data) {
     const inverseContainer = document.getElementById('inverse-usdt-krw-container');
     const originalContainer = document.getElementById('original-usdt-krw-container');
     
+    // USDT/KRW 조작 여부 확인 (original과 실제 업비트 가격이 다르면 조작된 것으로 판단)
+    const isManualUsdtKrw = originalUsdtKrw !== null && 
+        prices.upbit_usdt_krw !== null && 
+        Math.abs(originalUsdtKrw - prices.upbit_usdt_krw) > 0.01;
+    
     if (oracle_result.is_volatile && inverseUsdtKrw !== null && inverseUsdtKrw !== undefined) {
         // 역산 모드: 역산된 USDT/KRW와 원본 가격 표시
         document.getElementById('inverse-usdt-krw').textContent = formatCurrency(inverseUsdtKrw);
@@ -368,6 +373,11 @@ function updateDashboard(data) {
             document.getElementById('original-usdt-krw').textContent = formatCurrency(originalUsdtKrw);
             originalContainer.style.display = 'block';
         }
+    } else if (isManualUsdtKrw) {
+        // USDT/KRW가 조작된 경우 표시
+        document.getElementById('original-usdt-krw').textContent = formatCurrency(originalUsdtKrw);
+        originalContainer.style.display = 'block';
+        inverseContainer.style.display = 'none';
     } else {
         // 정상 모드: 역산 정보 숨기기
         inverseContainer.style.display = 'none';
