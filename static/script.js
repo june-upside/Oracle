@@ -58,22 +58,32 @@ function formatExchangeName(name) {
 
 // 웹소켓 연결 설정
 function setupWebSocket() {
-    socket = io();
+    socket = io({
+        transports: ['websocket', 'polling'], // WebSocket 우선, 폴백 지원
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+    });
     
     socket.on('connect', () => {
-        console.log('웹소켓 연결됨');
+        console.log('✅ 웹소켓 연결됨 - 실시간 업데이트 활성화');
     });
     
     socket.on('disconnect', () => {
-        console.log('웹소켓 연결 해제됨');
+        console.log('⚠️ 웹소켓 연결 해제됨');
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+        console.log(`🔄 웹소켓 재연결됨 (시도 ${attemptNumber})`);
     });
     
     socket.on('price_update', (data) => {
+        // 즉시 대시보드 업데이트 (지연 없음)
         updateDashboard(data);
     });
     
     socket.on('connect_error', (error) => {
-        console.error('웹소켓 연결 오류:', error);
+        console.error('❌ 웹소켓 연결 오류:', error);
         // 웹소켓 연결 실패 시 HTTP 폴링으로 폴백
         console.log('HTTP 폴링으로 전환합니다...');
         setupHttpPolling();
@@ -95,8 +105,8 @@ function setupHttpPolling() {
     // 즉시 한 번 실행
     fetchData();
     
-    // 1초마다 폴링
-    setInterval(fetchData, 1000);
+    // 0.5초마다 폴링 (웹소켓 업데이트 주기와 동일)
+    setInterval(fetchData, 500);
 }
 
 // 차트 초기화
