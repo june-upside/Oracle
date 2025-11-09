@@ -26,8 +26,10 @@
 - **실시간 모니터링**: WebSocket을 통한 실시간 가격 업데이트
 - **가격 차트**: Chart.js를 사용한 가격 추이 시각화
 - **상세 정보**: 각 거래소별 가격 및 계산 방법 표시
-- **다크모드**: 미니멀한 토글 스위치로 다크모드 지원
-- **테스트 기능**: USDT/KRW 가격 조작 게이지 (1,000원 ~ 6,000원 범위)
+- **다크모드**: 우측 상단 토글 스위치로 다크모드 지원
+- **테스트 기능**: 
+  - USDT/KRW 가격 조작 게이지 (1,000원 ~ 6,000원 범위)
+  - ETH/KRW 가격 조작 게이지 (1,000,000원 ~ 10,000,000원 범위)
 
 ## 🏦 지원 거래소
 
@@ -52,7 +54,11 @@
 ```bash
 # 저장소 클론 (또는 다운로드)
 git clone <repository-url>
-cd KUSDT
+cd Oracle
+
+# 가상환경 생성 (권장)
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # 의존성 설치
 pip install -r requirements.txt
@@ -64,7 +70,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-웹 브라우저에서 `http://localhost:5000` 접속
+웹 브라우저에서 `http://localhost:5100` 접속
 
 ## 🔧 작동 원리
 
@@ -100,8 +106,11 @@ USDT/KRW 가격이 급격히 변동할 때 자동으로 전환됩니다.
 
 ### 테스트 기능
 
-- 대시보드에서 USDT/KRW 가격을 게이지로 조작 (1,000원 ~ 6,000원)
-- 급격한 USDT 가격 변동 시 오라클의 저항성 테스트
+- **USDT/KRW 가격 조작**: 대시보드에서 게이지로 조작 (1,000원 ~ 6,000원)
+- **ETH/KRW 가격 조작**: 대시보드에서 게이지로 조작 (1,000,000원 ~ 10,000,000원)
+  - Upbit ETH/KRW 가격만 조작되며, 다른 거래소 가격은 정상적으로 수집됨
+  - 조작된 Upbit 가격과 다른 거래소 가격이 모두 중앙값 계산에 포함됨
+- 급격한 가격 변동 시 오라클의 저항성 테스트
 - 변동성 모드 자동 전환 확인
 
 ## 🎨 UI 기능
@@ -122,22 +131,22 @@ USDT/KRW 가격이 급격히 변동할 때 자동으로 전환됩니다.
 ### 실시간 업데이트
 - WebSocket을 통한 실시간 가격 업데이트
 - WebSocket 연결 실패 시 HTTP 폴링으로 자동 폴백
-- 1초마다 자동 업데이트
+- 0.5초마다 자동 업데이트 (더 빠른 반응성)
 
 ## 📁 프로젝트 구조
 
 ```
-KUSDT/
+Oracle/
 ├── app.py                 # Flask 웹 애플리케이션 메인 파일
-├── oracle.py               # 오라클 핵심 로직 (중앙값 계산, 변동성 감지)
-├── price_fetcher.py       # CCXT를 사용한 거래소 가격 수집
-├── requirements.txt       # Python 의존성 목록
-├── README.md              # 프로젝트 문서
+├── oracle.py              # 오라클 핵심 로직 (중앙값 계산, 변동성 감지)
+├── price_fetcher.py      # CCXT를 사용한 거래소 가격 수집
+├── requirements.txt      # Python 의존성 목록
+├── README.md             # 프로젝트 문서
 ├── templates/
-│   └── index.html         # 메인 대시보드 HTML 템플릿
+│   └── index.html        # 메인 대시보드 HTML 템플릿
 └── static/
-    ├── style.css          # 스타일시트 (다크모드 포함)
-    └── script.js          # 클라이언트 사이드 JavaScript
+    ├── style.css         # 스타일시트 (다크모드 포함)
+    └── script.js         # 클라이언트 사이드 JavaScript
 ```
 
 ## 🛠 기술 스택
@@ -145,8 +154,8 @@ KUSDT/
 ### Backend
 - **Flask**: 웹 프레임워크
 - **Flask-SocketIO**: WebSocket 지원
+- **Flask-CORS**: CORS 지원
 - **CCXT**: 암호화폐 거래소 API 통합 라이브러리
-- **Pandas/NumPy**: 데이터 처리
 
 ### Frontend
 - **Chart.js**: 가격 차트 시각화
@@ -162,7 +171,7 @@ KUSDT/
 - 변동성 임계값은 환경에 맞게 조정이 필요할 수 있습니다.
 
 ### 테스트 기능
-- USDT/KRW 가격 조작 기능은 테스트 목적으로만 사용하세요.
+- USDT/KRW 및 ETH/KRW 가격 조작 기능은 테스트 목적으로만 사용하세요.
 - 실제 운영 환경에서는 이 기능을 비활성화하는 것을 권장합니다.
 
 ### 거래소 지원
