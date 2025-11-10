@@ -76,6 +76,37 @@ class PriceFetcher:
                     print("✅ Bybit WebSocket 초기화 완료")
             except Exception as e:
                 print(f"경고: Bybit 초기화 실패: {e}")
+            
+            # Coinbase 초기화
+            try:
+                if hasattr(ccxtpro, 'coinbase'):
+                    self.coinbase_pro = ccxtpro.coinbase({
+                        'enableRateLimit': True,
+                    })
+                    self.overseas_exchanges_pro['coinbase'] = self.coinbase_pro
+                    self.overseas_exchanges.append(('coinbase', self.coinbase_pro))
+                    print("✅ Coinbase WebSocket 초기화 완료")
+                elif hasattr(ccxtpro, 'coinbasepro'):
+                    self.coinbase_pro = ccxtpro.coinbasepro({
+                        'enableRateLimit': True,
+                    })
+                    self.overseas_exchanges_pro['coinbase'] = self.coinbase_pro
+                    self.overseas_exchanges.append(('coinbase', self.coinbase_pro))
+                    print("✅ Coinbase Pro WebSocket 초기화 완료")
+            except Exception as e:
+                print(f"경고: Coinbase 초기화 실패: {e}")
+            
+            # Kraken 초기화
+            try:
+                if hasattr(ccxtpro, 'kraken'):
+                    self.kraken_pro = ccxtpro.kraken({
+                        'enableRateLimit': True,
+                    })
+                    self.overseas_exchanges_pro['kraken'] = self.kraken_pro
+                    self.overseas_exchanges.append(('kraken', self.kraken_pro))
+                    print("✅ Kraken WebSocket 초기화 완료")
+            except Exception as e:
+                print(f"경고: Kraken 초기화 실패: {e}")
         else:
             # CCXT Pro가 없으면 일반 CCXT 사용 (폴백)
             print("⚠️ CCXT Pro가 없어 해외 거래소는 HTTP 폴링을 사용합니다.")
@@ -90,6 +121,25 @@ class PriceFetcher:
                 self.overseas_exchanges.append(('okx', self.okx))
             except Exception as e:
                 print(f"경고: OKX 초기화 실패: {e}")
+            
+            # Coinbase 초기화 (폴백)
+            try:
+                if hasattr(ccxt, 'coinbase'):
+                    self.coinbase = ccxt.coinbase({'enableRateLimit': True})
+                    self.overseas_exchanges.append(('coinbase', self.coinbase))
+                elif hasattr(ccxt, 'coinbasepro'):
+                    self.coinbase = ccxt.coinbasepro({'enableRateLimit': True})
+                    self.overseas_exchanges.append(('coinbase', self.coinbase))
+            except Exception as e:
+                print(f"경고: Coinbase 초기화 실패: {e}")
+            
+            # Kraken 초기화 (폴백)
+            try:
+                if hasattr(ccxt, 'kraken'):
+                    self.kraken = ccxt.kraken({'enableRateLimit': True})
+                    self.overseas_exchanges.append(('kraken', self.kraken))
+            except Exception as e:
+                print(f"경고: Kraken 초기화 실패: {e}")
         
         # 해외 거래소 WebSocket 관련 변수
         self.overseas_ws_tasks = {}  # asyncio 태스크 저장
