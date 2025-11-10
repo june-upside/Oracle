@@ -1,13 +1,14 @@
 """
 거래소 가격 데이터 수집 모듈
-업비트는 웹소켓을 사용하고, 다른 거래소는 CCXT를 사용합니다.
-병렬 처리를 통해 모든 거래소 API를 동시에 호출하여 시간 동기화 문제를 해결합니다.
+업비트와 해외 거래소 모두 웹소켓을 사용합니다.
+업비트는 직접 웹소켓을 사용하고, 해외 거래소는 CCXT Pro를 사용합니다.
 """
 import ccxt
 import time
 import json
 import threading
 import uuid
+import asyncio
 from typing import Dict, Optional, List, Tuple
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,6 +18,13 @@ try:
 except ImportError:
     WEBSOCKET_AVAILABLE = False
     print("경고: websocket-client가 설치되지 않았습니다. 업비트 웹소켓을 사용하려면 'pip install websocket-client'를 실행하세요.")
+
+try:
+    import ccxt.pro as ccxtpro
+    CCXT_PRO_AVAILABLE = True
+except ImportError:
+    CCXT_PRO_AVAILABLE = False
+    print("경고: ccxt-pro가 설치되지 않았습니다. 해외 거래소 웹소켓을 사용하려면 'pip install ccxt-pro'를 실행하세요.")
 
 
 class PriceFetcher:
@@ -29,54 +37,70 @@ class PriceFetcher:
             'enableRateLimit': True,
         })
         
-        # 해외 거래소들
-        self.binance = ccxt.binance({
-            'enableRateLimit': True,
-        })
+        # 해외 거래소들 (CCXT Pro 사용)
+        self.overseas_exchanges_pro = {}  # CCXT Pro 인스턴스
+        self.overseas_exchanges = []  # 거래소 리스트
         
-        self.okx = ccxt.okx({
-            'enableRateLimit': True,
-        })
+        # CCXT Pro로 해외 거래소 초기화
+        if CCXT_PRO_AVAILABLE:
+            # Binance 초기화
+            try:
+                self.binance_pro = ccxtpro.binance({
+                    'enableRateLimit': True,
+                })
+                self.overseas_exchanges_pro['binance'] = self.binance_pro
+                self.overseas_exchanges.append(('binance', self.binance_pro))
+                print("✅ Binance WebSocket 초기화 완료")
+            except Exception as e:
+                print(f"경고: Binance 초기화 실패: {e}")
+            
+            # OKX 초기화
+            try:
+                self.okx_pro = ccxtpro.okx({
+                    'enableRateLimit': True,
+                })
+                self.overseas_exchanges_pro['okx'] = self.okx_pro
+                self.overseas_exchanges.append(('okx', self.okx_pro))
+                print("✅ OKX WebSocket 초기화 완료")
+            except Exception as e:
+                print(f"경고: OKX 초기화 실패: {e}")
+            
+            # Bybit 초기화
+            try:
+                if hasattr(ccxtpro, 'bybit'):
+                    self.bybit_pro = ccxtpro.bybit({
+                        'enableRateLimit': True,
+                    })
+                    self.overseas_exchanges_pro['bybit'] = self.bybit_pro
+                    self.overseas_exchanges.append(('bybit', self.bybit_pro))
+                    print("✅ Bybit WebSocket 초기화 완료")
+            except Exception as e:
+                print(f"경고: Bybit 초기화 실패: {e}")
+        else:
+            # CCXT Pro가 없으면 일반 CCXT 사용 (폴백)
+            print("⚠️ CCXT Pro가 없어 해외 거래소는 HTTP 폴링을 사용합니다.")
+            try:
+                self.binance = ccxt.binance({'enableRateLimit': True})
+                self.overseas_exchanges.append(('binance', self.binance))
+            except Exception as e:
+                print(f"경고: Binance 초기화 실패: {e}")
+            
+            try:
+                self.okx = ccxt.okx({'enableRateLimit': True})
+                self.overseas_exchanges.append(('okx', self.okx))
+            except Exception as e:
+                print(f"경고: OKX 초기화 실패: {e}")
         
-        # 추가 해외 거래소들 (선택적)
-        self.coinbase = None
-        self.kraken = None
-        self.bybit = None
+        # 해외 거래소 WebSocket 관련 변수
+        self.overseas_ws_tasks = {}  # asyncio 태스크 저장
+        self.overseas_ws_loops = {}  # 각 거래소별 이벤트 루프
+        self.overseas_ws_threads = {}  # 각 거래소별 스레드
+        self.overseas_ws_running = {}  # 실행 상태
+        self.overseas_ws_lock = threading.Lock()
         
-        # Coinbase 초기화 시도
-        try:
-            if hasattr(ccxt, 'coinbase'):
-                self.coinbase = ccxt.coinbase({'enableRateLimit': True})
-            elif hasattr(ccxt, 'coinbasepro'):
-                self.coinbase = ccxt.coinbasepro({'enableRateLimit': True})
-        except Exception as e:
-            print(f"경고: Coinbase 거래소 초기화 실패: {e}")
-        
-        # Kraken 초기화 시도
-        try:
-            if hasattr(ccxt, 'kraken'):
-                self.kraken = ccxt.kraken({'enableRateLimit': True})
-        except Exception as e:
-            print(f"경고: Kraken 거래소 초기화 실패: {e}")
-        
-        # Bybit 초기화 시도
-        try:
-            if hasattr(ccxt, 'bybit'):
-                self.bybit = ccxt.bybit({'enableRateLimit': True})
-        except Exception as e:
-            print(f"경고: Bybit 거래소 초기화 실패: {e}")
-        
-        # 해외 거래소 리스트 (초기화된 거래소만 추가)
-        self.overseas_exchanges = [
-            ('binance', self.binance),
-            ('okx', self.okx),
-        ]
-        if self.coinbase is not None:
-            self.overseas_exchanges.append(('coinbase', self.coinbase))
-        if self.kraken is not None:
-            self.overseas_exchanges.append(('kraken', self.kraken))
-        if self.bybit is not None:
-            self.overseas_exchanges.append(('bybit', self.bybit))
+        # 해외 거래소 WebSocket 초기화
+        if CCXT_PRO_AVAILABLE:
+            self._init_overseas_websockets()
         
         # 가격 캐시 (최근 가격 저장)
         self.price_cache = {}
@@ -92,6 +116,80 @@ class PriceFetcher:
         # 업비트 웹소켓 초기화 (websocket-client가 있는 경우)
         if WEBSOCKET_AVAILABLE:
             self._init_upbit_websocket()
+    
+    def _process_overseas_ticker(self, exchange_name: str, ticker: dict):
+        """해외 거래소 티커 데이터 처리"""
+        try:
+            if ticker is None:
+                return
+            
+            # CCXT Pro 티커 형식에서 가격 추출
+            price = ticker.get('last') or ticker.get('close')
+            if price is None:
+                return
+            
+            price = float(price)
+            
+            # 타임스탬프 추출
+            timestamp = ticker.get('timestamp')
+            if timestamp is None:
+                timestamp = time.time()
+            elif timestamp > 1e10:
+                timestamp = timestamp / 1000.0  # ms를 초로 변환
+            
+            cache_key = f'{exchange_name}_eth_usdt'
+            with self.overseas_ws_lock:
+                self.price_cache[cache_key] = price
+                self.cache_timestamp[cache_key] = timestamp
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"{exchange_name} 티커 데이터 처리 오류: {e}, 데이터: {ticker}")
+    
+    def _init_overseas_websockets(self):
+        """해외 거래소 WebSocket 초기화 및 연결"""
+        if not CCXT_PRO_AVAILABLE:
+            return
+        
+        async def watch_ticker_loop(exchange_name: str, exchange):
+            """각 거래소별 티커 수신 루프"""
+            try:
+                while self.overseas_ws_running.get(exchange_name, False):
+                    try:
+                        # CCXT Pro의 watch_ticker 사용
+                        ticker = await exchange.watch_ticker('ETH/USDT')
+                        self._process_overseas_ticker(exchange_name, ticker)
+                    except Exception as e:
+                        print(f"{exchange_name} WebSocket 티커 수신 오류: {e}")
+                        await asyncio.sleep(1)  # 오류 시 1초 대기 후 재시도
+            except Exception as e:
+                print(f"{exchange_name} WebSocket 루프 오류: {e}")
+            finally:
+                self.overseas_ws_running[exchange_name] = False
+        
+        def run_async_loop(exchange_name: str, exchange):
+            """각 거래소별 이벤트 루프 실행"""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self.overseas_ws_loops[exchange_name] = loop
+            
+            try:
+                self.overseas_ws_running[exchange_name] = True
+                loop.run_until_complete(watch_ticker_loop(exchange_name, exchange))
+            except Exception as e:
+                print(f"{exchange_name} 이벤트 루프 오류: {e}")
+            finally:
+                loop.close()
+        
+        # 각 거래소별로 WebSocket 스레드 시작
+        for exchange_name, exchange in self.overseas_exchanges:
+            if exchange_name in self.overseas_exchanges_pro:
+                thread = threading.Thread(
+                    target=run_async_loop,
+                    args=(exchange_name, exchange),
+                    daemon=True
+                )
+                thread.start()
+                self.overseas_ws_threads[exchange_name] = thread
+                print(f"✅ {exchange_name} WebSocket 스레드 시작")
     
     def _process_upbit_ticker(self, data: dict):
         """업비트 티커 데이터 처리"""
@@ -266,19 +364,48 @@ class PriceFetcher:
             return ('upbit_usdt_krw', cached_price, timestamp)
     
     def _fetch_overseas_price(self, exchange_name: str, exchange) -> Tuple[str, Optional[float], float]:
-        """해외 거래소 ETH/USDT 가격 수집 (병렬 처리용)"""
+        """해외 거래소 ETH/USDT 가격 수집 (WebSocket 캐시 사용 또는 폴백)"""
         timestamp = time.time()
-        try:
-            ticker = exchange.fetch_ticker('ETH/USDT')
-            price = float(ticker['last'])
-            cache_key = f'{exchange_name}_eth_usdt'
-            self.price_cache[cache_key] = price
-            self.cache_timestamp[cache_key] = timestamp
-            return (exchange_name, price, timestamp)
-        except Exception as e:
-            print(f"{exchange_name} ETH/USDT 가격 수집 실패: {e}")
-            cache_key = f'{exchange_name}_eth_usdt'
-            return (exchange_name, self.price_cache.get(cache_key), timestamp)
+        cache_key = f'{exchange_name}_eth_usdt'
+        
+        # WebSocket 캐시에서 가격 가져오기
+        with self.overseas_ws_lock:
+            cached_price = self.price_cache.get(cache_key)
+            cached_timestamp = self.cache_timestamp.get(cache_key, 0)
+            
+            # 캐시된 가격이 있고 최근 것(5초 이내)이면 사용
+            if cached_price is not None and (timestamp - cached_timestamp) < 5:
+                return (exchange_name, cached_price, cached_timestamp)
+        
+        # WebSocket이 없거나 캐시가 오래된 경우 REST API 폴백
+        if CCXT_PRO_AVAILABLE and exchange_name in self.overseas_exchanges_pro:
+            # CCXT Pro는 일반 CCXT 인스턴스도 필요할 수 있음
+            try:
+                # 일반 CCXT로 폴백 시도
+                if hasattr(ccxt, exchange_name):
+                    fallback_exchange = getattr(ccxt, exchange_name)({'enableRateLimit': True})
+                    ticker = fallback_exchange.fetch_ticker('ETH/USDT')
+                    price = float(ticker['last'])
+                    with self.overseas_ws_lock:
+                        self.price_cache[cache_key] = price
+                        self.cache_timestamp[cache_key] = timestamp
+                    return (exchange_name, price, timestamp)
+            except Exception as e:
+                print(f"{exchange_name} REST API 폴백 실패: {e}")
+        else:
+            # 일반 CCXT 사용
+            try:
+                ticker = exchange.fetch_ticker('ETH/USDT')
+                price = float(ticker['last'])
+                with self.overseas_ws_lock:
+                    self.price_cache[cache_key] = price
+                    self.cache_timestamp[cache_key] = timestamp
+                return (exchange_name, price, timestamp)
+            except Exception as e:
+                print(f"{exchange_name} ETH/USDT 가격 수집 실패: {e}")
+        
+        # 모든 방법 실패 시 캐시된 값 반환
+        return (exchange_name, cached_price, timestamp)
     
     def get_upbit_eth_krw(self) -> Optional[float]:
         """업비트에서 ETH/KRW 가격 가져오기 (하위 호환성)"""

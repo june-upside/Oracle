@@ -253,6 +253,7 @@ function initPriceChart() {
                     }
                 },
                 y: {
+                    beginAtZero: false,
                     grid: {
                         color: gridColor,
                         drawBorder: false,
@@ -264,14 +265,15 @@ function initPriceChart() {
                             size: 10,
                         },
                         color: textColor,
-                        padding: 10,
+                        padding: 5,
                         callback: function(value) {
                             return formatNumber(value);
                         }
                     },
                     border: {
                         display: false,
-                    }
+                    },
+                    grace: 0, // 자동 여백 제거
                 }
             },
             interaction: {
@@ -371,6 +373,28 @@ function updateDashboard(data) {
         }
         
         priceChart.data.datasets[0].backgroundColor = gradient;
+        
+        // Y축 스케일을 데이터 범위에 맞춰 조정 (차이를 더 잘 보이도록)
+        const allPrices = [
+            ...(history.median_prices || []).filter(p => p !== null && p !== undefined && p > 0),
+            ...(history.upbit_eth_krw || []).filter(p => p !== null && p !== undefined && p > 0)
+        ];
+        
+        if (allPrices.length > 0) {
+            const minPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+            const priceRange = maxPrice - minPrice;
+            
+            // 최소한의 여백만 추가 (1% 또는 최소 1000원)
+            const padding = Math.max(priceRange * 0.01, 1000);
+            const suggestedMin = minPrice - padding;
+            const suggestedMax = maxPrice + padding;
+            
+            // Y축 범위를 정확히 설정 (Chart.js의 자동 조정 방지)
+            priceChart.options.scales.y.min = suggestedMin;
+            priceChart.options.scales.y.max = suggestedMax;
+            priceChart.options.scales.y.grace = 0; // 자동 여백 완전히 제거
+        }
         
         // 부드러운 애니메이션으로 업데이트
         priceChart.update('active');
