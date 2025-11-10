@@ -26,13 +26,14 @@ latest_data = {
     'timestamp': None,
 }
 
-# 가격 히스토리 (차트용, 최대 100개 데이터 포인트)
+# 가격 히스토리 (차트용, 시간 기반으로 관리)
 price_history = {
     'timestamps': [],
     'median_prices': [],
     'upbit_eth_krw': [],
     'upbit_usdt_krw': [],
-    'max_points': 100,
+    'max_points': 10000,  # 충분히 큰 값으로 설정 (실제로는 시간 기반으로 필터링)
+    'max_hours': 24,  # 최대 24시간 데이터 보관
 }
 
 # 데이터 업데이트 스레드
@@ -79,7 +80,21 @@ def update_prices():
                     price_history['upbit_eth_krw'].append(upbit_eth)
                     price_history['upbit_usdt_krw'].append(upbit_usdt)
                     
-                    # 최대 포인트 수 제한
+                    # 시간 기반으로 오래된 데이터 제거 (최대 24시간)
+                    from datetime import timedelta
+                    cutoff_time = datetime.now() - timedelta(hours=price_history['max_hours'])
+                    cutoff_iso = cutoff_time.isoformat()
+                    
+                    # 오래된 데이터 제거
+                    while (price_history['timestamps'] and 
+                           len(price_history['timestamps']) > 0 and 
+                           price_history['timestamps'][0] < cutoff_iso):
+                        price_history['timestamps'].pop(0)
+                        price_history['median_prices'].pop(0)
+                        price_history['upbit_eth_krw'].pop(0)
+                        price_history['upbit_usdt_krw'].pop(0)
+                    
+                    # 최대 포인트 수 제한 (안전장치)
                     if len(price_history['timestamps']) > price_history['max_points']:
                         price_history['timestamps'].pop(0)
                         price_history['median_prices'].pop(0)
