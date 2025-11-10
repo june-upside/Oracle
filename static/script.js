@@ -251,10 +251,10 @@ function updateDashboard(data) {
     // 계산 방법 표시
     const methodEl = document.getElementById('calculation-method');
     if (oracle_result.calculation_method === 'normal') {
-        methodEl.textContent = 'Normal Mode';
+        methodEl.textContent = 'Primary Mode';
         methodEl.style.color = '#4caf50';
     } else if (oracle_result.calculation_method === 'inverse') {
-        methodEl.textContent = 'Inverse Mode';
+        methodEl.textContent = 'Backup Mode';
         methodEl.style.color = '#dc3545';
     } else {
         methodEl.textContent = 'No Data';
@@ -320,10 +320,10 @@ function updateDashboard(data) {
         ethKrwMethodEl.textContent = 'Upbit 수동 조작';
         ethKrwMethodEl.style.color = '#ffc107';
     } else if (oracle_result.calculation_method === 'normal') {
-        ethKrwMethodEl.textContent = 'Normal Mode';
+        ethKrwMethodEl.textContent = 'Primary Mode';
         ethKrwMethodEl.style.color = '#4caf50';
     } else if (oracle_result.calculation_method === 'inverse') {
-        ethKrwMethodEl.textContent = 'Inverse Mode';
+        ethKrwMethodEl.textContent = 'Backup Mode';
         ethKrwMethodEl.style.color = '#dc3545';
     } else {
         ethKrwMethodEl.textContent = '-';
