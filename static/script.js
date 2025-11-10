@@ -117,7 +117,7 @@ function initPriceChart() {
     
     // 다크모드에 따른 색상 설정
     const primaryColor = isDark ? '#6366f1' : '#4f46e5'; // 인디고 블루
-    const secondaryColor = isDark ? '#8b5cf6' : '#7c3aed'; // 보라색
+    const secondaryColor = isDark ? '#3b82f6' : '#2563eb'; // 파란색(남색)
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const textColor = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
     const legendColor = isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)';
@@ -158,11 +158,8 @@ function initPriceChart() {
                     borderWidth: 3,
                     fill: true,
                     tension: 0.5, // 더 매끄러운 곡선
-                    pointRadius: 0, // 포인트 숨김
-                    pointHoverRadius: 6,
-                    pointHoverBackgroundColor: primaryColor,
-                    pointHoverBorderColor: '#fff',
-                    pointHoverBorderWidth: 2,
+                    pointRadius: 0, // 포인트 완전히 숨김
+                    pointHoverRadius: 0, // 호버 시에도 포인트 없음
                     cubicInterpolationMode: 'monotone', // 더 자연스러운 곡선
                     shadowOffsetX: 0,
                     shadowOffsetY: 4,
@@ -177,11 +174,8 @@ function initPriceChart() {
                     borderWidth: 2,
                     fill: false,
                     tension: 0.5,
-                    pointRadius: 0,
-                    pointHoverRadius: 5,
-                    pointHoverBackgroundColor: secondaryColor,
-                    pointHoverBorderColor: '#fff',
-                    pointHoverBorderWidth: 2,
+                    pointRadius: 0, // 포인트 완전히 숨김
+                    pointHoverRadius: 0, // 호버 시에도 포인트 없음
                     borderDash: [8, 4], // 더 긴 점선
                     cubicInterpolationMode: 'monotone',
                 }
@@ -192,8 +186,8 @@ function initPriceChart() {
             maintainAspectRatio: true,
             aspectRatio: 3,
             animation: {
-                duration: 750,
-                easing: 'easeInOutQuart',
+                duration: 400,
+                easing: 'easeOutQuart',
             },
             plugins: {
                 legend: {
@@ -289,6 +283,11 @@ function initPriceChart() {
                 line: {
                     borderCapStyle: 'round',
                     borderJoinStyle: 'round',
+                },
+                point: {
+                    radius: 0,
+                    hoverRadius: 0,
+                    pointStyle: false,
                 }
             }
         }
@@ -314,7 +313,67 @@ function updateDashboard(data) {
         priceChart.data.labels = labels;
         priceChart.data.datasets[0].data = history.median_prices || [];
         priceChart.data.datasets[1].data = history.upbit_eth_krw || [];
-        priceChart.update('none'); // 애니메이션 없이 업데이트
+        
+        // 계산 방법에 따라 차트 색상 변경
+        const isDark = document.body.classList.contains('dark-mode');
+        const calculationMethod = oracle_result.calculation_method;
+        const ctx = priceChart.canvas.getContext('2d');
+        const chartArea = priceChart.chartArea;
+        
+        // 그라데이션 생성 (차트 높이에 맞춤)
+        const gradient = ctx.createLinearGradient(0, chartArea ? chartArea.top : 0, 0, chartArea ? chartArea.bottom : 400);
+        
+        if (calculationMethod === 'normal') {
+            // Primary Mode: 초록색
+            if (isDark) {
+                gradient.addColorStop(0, 'rgba(76, 175, 80, 0.3)'); // #4caf50
+                gradient.addColorStop(0.5, 'rgba(76, 175, 80, 0.15)');
+                gradient.addColorStop(1, 'rgba(76, 175, 80, 0)');
+                priceChart.data.datasets[0].borderColor = '#4caf50';
+                priceChart.data.datasets[0].shadowColor = 'rgba(76, 175, 80, 0.3)';
+            } else {
+                gradient.addColorStop(0, 'rgba(76, 175, 80, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(76, 175, 80, 0.1)');
+                gradient.addColorStop(1, 'rgba(76, 175, 80, 0)');
+                priceChart.data.datasets[0].borderColor = '#4caf50';
+                priceChart.data.datasets[0].shadowColor = 'rgba(76, 175, 80, 0.2)';
+            }
+        } else if (calculationMethod === 'inverse') {
+            // Backup Mode: 빨간색
+            if (isDark) {
+                gradient.addColorStop(0, 'rgba(220, 53, 69, 0.3)'); // #dc3545
+                gradient.addColorStop(0.5, 'rgba(220, 53, 69, 0.15)');
+                gradient.addColorStop(1, 'rgba(220, 53, 69, 0)');
+                priceChart.data.datasets[0].borderColor = '#dc3545';
+                priceChart.data.datasets[0].shadowColor = 'rgba(220, 53, 69, 0.3)';
+            } else {
+                gradient.addColorStop(0, 'rgba(220, 53, 69, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(220, 53, 69, 0.1)');
+                gradient.addColorStop(1, 'rgba(220, 53, 69, 0)');
+                priceChart.data.datasets[0].borderColor = '#dc3545';
+                priceChart.data.datasets[0].shadowColor = 'rgba(220, 53, 69, 0.2)';
+            }
+        } else {
+            // 기본 색상 (인디고 블루)
+            if (isDark) {
+                gradient.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+                gradient.addColorStop(0.5, 'rgba(99, 102, 241, 0.15)');
+                gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+                priceChart.data.datasets[0].borderColor = '#6366f1';
+                priceChart.data.datasets[0].shadowColor = 'rgba(99, 102, 241, 0.3)';
+            } else {
+                gradient.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(79, 70, 229, 0.1)');
+                gradient.addColorStop(1, 'rgba(79, 70, 229, 0)');
+                priceChart.data.datasets[0].borderColor = '#4f46e5';
+                priceChart.data.datasets[0].shadowColor = 'rgba(79, 70, 229, 0.2)';
+            }
+        }
+        
+        priceChart.data.datasets[0].backgroundColor = gradient;
+        
+        // 부드러운 애니메이션으로 업데이트
+        priceChart.update('active');
     }
 
     // 중앙값 가격 표시
@@ -747,8 +806,8 @@ function updateChartColors(isDark) {
         priceChart.data.datasets[0].pointHoverBackgroundColor = '#6366f1';
         priceChart.data.datasets[0].shadowColor = 'rgba(99, 102, 241, 0.3)';
         
-        priceChart.data.datasets[1].borderColor = '#8b5cf6';
-        priceChart.data.datasets[1].pointHoverBackgroundColor = '#8b5cf6';
+        priceChart.data.datasets[1].borderColor = '#3b82f6';
+        priceChart.data.datasets[1].pointHoverBackgroundColor = '#3b82f6';
         
         priceChart.options.scales.x.grid.color = 'rgba(255, 255, 255, 0.05)';
         priceChart.options.scales.y.grid.color = 'rgba(255, 255, 255, 0.05)';
@@ -768,8 +827,8 @@ function updateChartColors(isDark) {
         priceChart.data.datasets[0].pointHoverBackgroundColor = '#4f46e5';
         priceChart.data.datasets[0].shadowColor = 'rgba(79, 70, 229, 0.2)';
         
-        priceChart.data.datasets[1].borderColor = '#7c3aed';
-        priceChart.data.datasets[1].pointHoverBackgroundColor = '#7c3aed';
+        priceChart.data.datasets[1].borderColor = '#2563eb';
+        priceChart.data.datasets[1].pointHoverBackgroundColor = '#2563eb';
         
         priceChart.options.scales.x.grid.color = 'rgba(0, 0, 0, 0.05)';
         priceChart.options.scales.y.grid.color = 'rgba(0, 0, 0, 0.05)';
