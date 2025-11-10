@@ -115,12 +115,35 @@ function initPriceChart() {
     const ctx = document.getElementById('priceChart').getContext('2d');
     const isDark = document.body.classList.contains('dark-mode');
     
-    // 다크모드에 따른 초기 색상 설정
-    const primaryColor = isDark ? '#e0e0e0' : '#1a1a1a';
-    const secondaryColor = isDark ? '#b0b0b0' : '#666';
-    const gridColor = isDark ? '#333' : '#e5e5e5';
-    const textColor = isDark ? '#b0b0b0' : '#1a1a1a';
-    const legendColor = isDark ? '#e0e0e0' : '#1a1a1a';
+    // 다크모드에 따른 색상 설정
+    const primaryColor = isDark ? '#6366f1' : '#4f46e5'; // 인디고 블루
+    const secondaryColor = isDark ? '#8b5cf6' : '#7c3aed'; // 보라색
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+    const textColor = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
+    const legendColor = isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)';
+    
+    // 그라데이션 생성
+    const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+    if (isDark) {
+        gradient1.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+        gradient1.addColorStop(0.5, 'rgba(99, 102, 241, 0.15)');
+        gradient1.addColorStop(1, 'rgba(99, 102, 241, 0)');
+    } else {
+        gradient1.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+        gradient1.addColorStop(0.5, 'rgba(79, 70, 229, 0.1)');
+        gradient1.addColorStop(1, 'rgba(79, 70, 229, 0)');
+    }
+    
+    const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+    if (isDark) {
+        gradient2.addColorStop(0, 'rgba(139, 92, 246, 0.2)');
+        gradient2.addColorStop(0.5, 'rgba(139, 92, 246, 0.1)');
+        gradient2.addColorStop(1, 'rgba(139, 92, 246, 0)');
+    } else {
+        gradient2.addColorStop(0, 'rgba(124, 58, 237, 0.15)');
+        gradient2.addColorStop(0.5, 'rgba(124, 58, 237, 0.08)');
+        gradient2.addColorStop(1, 'rgba(124, 58, 237, 0)');
+    }
     
     priceChart = new Chart(ctx, {
         type: 'line',
@@ -131,20 +154,36 @@ function initPriceChart() {
                     label: '중앙값 가격',
                     data: [],
                     borderColor: primaryColor,
-                    backgroundColor: isDark ? 'rgba(224, 224, 224, 0.1)' : 'rgba(26, 26, 26, 0.1)',
-                    borderWidth: 2,
+                    backgroundColor: gradient1,
+                    borderWidth: 3,
                     fill: true,
-                    tension: 0.4,
+                    tension: 0.5, // 더 매끄러운 곡선
+                    pointRadius: 0, // 포인트 숨김
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: primaryColor,
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                    cubicInterpolationMode: 'monotone', // 더 자연스러운 곡선
+                    shadowOffsetX: 0,
+                    shadowOffsetY: 4,
+                    shadowBlur: 10,
+                    shadowColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(79, 70, 229, 0.2)',
                 },
                 {
                     label: '업비트 ETH/KRW',
                     data: [],
                     borderColor: secondaryColor,
-                    backgroundColor: isDark ? 'rgba(176, 176, 176, 0.1)' : 'rgba(102, 102, 102, 0.1)',
-                    borderWidth: 1,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
                     fill: false,
-                    tension: 0.4,
-                    borderDash: [5, 5],
+                    tension: 0.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    pointHoverBackgroundColor: secondaryColor,
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                    borderDash: [8, 4], // 더 긴 점선
+                    cubicInterpolationMode: 'monotone',
                 }
             ]
         },
@@ -152,22 +191,40 @@ function initPriceChart() {
             responsive: true,
             maintainAspectRatio: true,
             aspectRatio: 3,
+            animation: {
+                duration: 750,
+                easing: 'easeInOutQuart',
+            },
             plugins: {
                 legend: {
                     display: true,
                     position: 'top',
+                    align: 'end',
                     labels: {
                         font: {
                             family: "'JetBrains Mono', monospace",
-                            size: 12,
+                            size: 11,
+                            weight: '500',
                         },
                         usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 15,
                         color: legendColor,
+                        boxWidth: 12,
+                        boxHeight: 12,
                     }
                 },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
+                    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+                    titleColor: isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
+                    bodyColor: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    displayColors: true,
                     callbacks: {
                         label: function(context) {
                             return context.dataset.label + ': ' + formatCurrency(context.parsed.y);
@@ -175,13 +232,17 @@ function initPriceChart() {
                     },
                     font: {
                         family: "'JetBrains Mono', monospace",
-                    }
+                        size: 11,
+                    },
+                    boxPadding: 6,
                 }
             },
             scales: {
                 x: {
                     grid: {
                         color: gridColor,
+                        drawBorder: false,
+                        lineWidth: 1,
                     },
                     ticks: {
                         font: {
@@ -191,11 +252,17 @@ function initPriceChart() {
                         color: textColor,
                         maxRotation: 45,
                         minRotation: 45,
+                        padding: 8,
+                    },
+                    border: {
+                        display: false,
                     }
                 },
                 y: {
                     grid: {
                         color: gridColor,
+                        drawBorder: false,
+                        lineWidth: 1,
                     },
                     ticks: {
                         font: {
@@ -203,9 +270,13 @@ function initPriceChart() {
                             size: 10,
                         },
                         color: textColor,
+                        padding: 10,
                         callback: function(value) {
                             return formatNumber(value);
                         }
+                    },
+                    border: {
+                        display: false,
                     }
                 }
             },
@@ -213,6 +284,12 @@ function initPriceChart() {
                 mode: 'nearest',
                 axis: 'x',
                 intersect: false
+            },
+            elements: {
+                line: {
+                    borderCapStyle: 'round',
+                    borderJoinStyle: 'round',
+                }
             }
         }
     });
@@ -655,26 +732,54 @@ function setupDarkMode() {
 function updateChartColors(isDark) {
     if (!priceChart) return;
     
+    const ctx = priceChart.canvas.getContext('2d');
+    
+    // 그라데이션 재생성
+    const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+    const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+    
     if (isDark) {
-        priceChart.data.datasets[0].borderColor = '#e0e0e0';
-        priceChart.data.datasets[0].backgroundColor = 'rgba(224, 224, 224, 0.1)';
-        priceChart.data.datasets[1].borderColor = '#b0b0b0';
-        priceChart.data.datasets[1].backgroundColor = 'rgba(176, 176, 176, 0.1)';
-        priceChart.options.scales.x.grid.color = '#333';
-        priceChart.options.scales.y.grid.color = '#333';
-        priceChart.options.scales.x.ticks.color = '#b0b0b0';
-        priceChart.options.scales.y.ticks.color = '#b0b0b0';
-        priceChart.options.plugins.legend.labels.color = '#e0e0e0';
+        priceChart.data.datasets[0].borderColor = '#6366f1';
+        gradient1.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+        gradient1.addColorStop(0.5, 'rgba(99, 102, 241, 0.15)');
+        gradient1.addColorStop(1, 'rgba(99, 102, 241, 0)');
+        priceChart.data.datasets[0].backgroundColor = gradient1;
+        priceChart.data.datasets[0].pointHoverBackgroundColor = '#6366f1';
+        priceChart.data.datasets[0].shadowColor = 'rgba(99, 102, 241, 0.3)';
+        
+        priceChart.data.datasets[1].borderColor = '#8b5cf6';
+        priceChart.data.datasets[1].pointHoverBackgroundColor = '#8b5cf6';
+        
+        priceChart.options.scales.x.grid.color = 'rgba(255, 255, 255, 0.05)';
+        priceChart.options.scales.y.grid.color = 'rgba(255, 255, 255, 0.05)';
+        priceChart.options.scales.x.ticks.color = 'rgba(255, 255, 255, 0.7)';
+        priceChart.options.scales.y.ticks.color = 'rgba(255, 255, 255, 0.7)';
+        priceChart.options.plugins.legend.labels.color = 'rgba(255, 255, 255, 0.9)';
+        priceChart.options.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+        priceChart.options.plugins.tooltip.titleColor = 'rgba(255, 255, 255, 0.9)';
+        priceChart.options.plugins.tooltip.bodyColor = 'rgba(255, 255, 255, 0.8)';
+        priceChart.options.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
     } else {
-        priceChart.data.datasets[0].borderColor = '#1a1a1a';
-        priceChart.data.datasets[0].backgroundColor = 'rgba(26, 26, 26, 0.1)';
-        priceChart.data.datasets[1].borderColor = '#666';
-        priceChart.data.datasets[1].backgroundColor = 'rgba(102, 102, 102, 0.1)';
-        priceChart.options.scales.x.grid.color = '#e5e5e5';
-        priceChart.options.scales.y.grid.color = '#e5e5e5';
-        priceChart.options.scales.x.ticks.color = '#1a1a1a';
-        priceChart.options.scales.y.ticks.color = '#1a1a1a';
-        priceChart.options.plugins.legend.labels.color = '#1a1a1a';
+        priceChart.data.datasets[0].borderColor = '#4f46e5';
+        gradient1.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+        gradient1.addColorStop(0.5, 'rgba(79, 70, 229, 0.1)');
+        gradient1.addColorStop(1, 'rgba(79, 70, 229, 0)');
+        priceChart.data.datasets[0].backgroundColor = gradient1;
+        priceChart.data.datasets[0].pointHoverBackgroundColor = '#4f46e5';
+        priceChart.data.datasets[0].shadowColor = 'rgba(79, 70, 229, 0.2)';
+        
+        priceChart.data.datasets[1].borderColor = '#7c3aed';
+        priceChart.data.datasets[1].pointHoverBackgroundColor = '#7c3aed';
+        
+        priceChart.options.scales.x.grid.color = 'rgba(0, 0, 0, 0.05)';
+        priceChart.options.scales.y.grid.color = 'rgba(0, 0, 0, 0.05)';
+        priceChart.options.scales.x.ticks.color = 'rgba(0, 0, 0, 0.6)';
+        priceChart.options.scales.y.ticks.color = 'rgba(0, 0, 0, 0.6)';
+        priceChart.options.plugins.legend.labels.color = 'rgba(0, 0, 0, 0.9)';
+        priceChart.options.plugins.tooltip.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+        priceChart.options.plugins.tooltip.titleColor = 'rgba(0, 0, 0, 0.9)';
+        priceChart.options.plugins.tooltip.bodyColor = 'rgba(0, 0, 0, 0.8)';
+        priceChart.options.plugins.tooltip.borderColor = 'rgba(0, 0, 0, 0.1)';
     }
     priceChart.update('none');
 }
