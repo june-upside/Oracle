@@ -17,7 +17,7 @@
         </label>
     </div>
     <div class="container">
-        <header>
+        <header style="margin-top: 40px;">
             <h1>🇰🇷 Koracle</h1>
             <p class="subtitle">Mass Liquidation Prevention System</p>
         </header>
@@ -76,7 +76,7 @@
                             <span id="inverse-usdt-krw" style="color: #dc3545; font-weight: bold;">-</span>
                         </div>
                         <div class="info-item" id="original-usdt-krw-container" style="display: none;">
-                            <label>원본 USDT/KRW</label>
+                            <label>조작된 업비트 USDT/KRW 가격</label>
                             <span id="original-usdt-krw" style="color: #ffc107;">-</span>
                         </div>
                     </div>
@@ -103,7 +103,7 @@
                             </div>
                         </div>
                         <div class="gauge-value">
-                            <label>현재 가격:</label>
+                            <label>설정할 가격:</label>
                             <span id="gauge-value-display">1300</span>
                             <span class="unit">KRW</span>
                         </div>
@@ -112,6 +112,63 @@
                             <button id="apply-gauge" class="btn btn-primary">적용</button>
                         </div>
                         <div class="gauge-status" id="gauge-status">
+                            <span>자동 모드</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ETH/KRW 가격 조작 -->
+            <div class="usdt-section">
+                <!-- ETH/KRW 정보 -->
+                <section class="card usdt-info">
+                    <h2>ETH/KRW 정보</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <label>업비트 가격</label>
+                            <span id="upbit-eth-krw-info">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>중앙값 가격</label>
+                            <span id="median-eth-krw-info">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>계산 방법</label>
+                            <span id="eth-krw-method">-</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ETH/KRW 가격 조작 게이지 -->
+                <section class="card usdt-control">
+                    <h2>ETH/KRW 가격 조작 (테스트용)</h2>
+                    <div class="gauge-container">
+                        <div class="gauge-wrapper">
+                            <input 
+                                type="range" 
+                                id="eth-krw-gauge" 
+                                class="gauge"
+                                min="1000000" 
+                                max="10000000" 
+                                step="10000"
+                                value="5000000"
+                            >
+                            <div class="gauge-labels">
+                                <span>1,000,000</span>
+                                <span>5,500,000</span>
+                                <span>10,000,000</span>
+                            </div>
+                        </div>
+                        <div class="gauge-value">
+                            <label>설정할 가격:</label>
+                            <span id="eth-gauge-value-display">5,000,000</span>
+                            <span class="unit">KRW</span>
+                        </div>
+                        <div class="gauge-controls">
+                            <button id="reset-eth-gauge" class="btn btn-secondary">리셋</button>
+                            <button id="apply-eth-gauge" class="btn btn-primary">적용</button>
+                        </div>
+                        <div class="gauge-status" id="eth-gauge-status">
                             <span>자동 모드</span>
                         </div>
                     </div>

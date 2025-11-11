@@ -27,6 +27,9 @@ class Oracle:
         # 조작된 USDT/KRW 가격 (테스트용)
         self.manual_usdt_krw_override: Optional[float] = None
         
+        # 조작된 ETH/KRW 가격 (테스트용)
+        self.manual_eth_krw_override: Optional[float] = None
+        
     def add_usdt_krw_price(self, price: float, timestamp: Optional[float] = None):
         """USDT/KRW 가격 히스토리 추가"""
         if timestamp is None:
@@ -104,7 +107,8 @@ class Oracle:
         upbit_eth_krw: Optional[float],
         upbit_usdt_krw: Optional[float],
         overseas_eth_usdt: Dict[str, Optional[float]],
-        use_manual_usdt_krw: bool = False
+        use_manual_usdt_krw: bool = False,
+        use_manual_eth_krw: bool = False
     ) -> Dict:
         """
         ETH/KRW 중앙값 가격 계산
@@ -127,19 +131,24 @@ class Oracle:
         else:
             usdt_krw_price = upbit_usdt_krw
         
-        # USDT/KRW 가격 히스토리 업데이트
+        # USDT/KRW 가격 히스토리 업데이트 (수동 ETH/KRW 사용 여부와 관계없이)
         if usdt_krw_price is not None:
             self.add_usdt_krw_price(usdt_krw_price)
+        
+        # TWAP 계산 (수동 ETH/KRW 사용 여부와 관계없이)
+        twap = self.calculate_twap()
         
         # USDT/KRW 변동성 체크
         is_volatile = False
         if usdt_krw_price is not None:
             is_volatile = self.check_usdt_krw_volatility(usdt_krw_price)
         
-        twap = self.calculate_twap()
-        
-        # 국내 거래소 가격 추가
-        if upbit_eth_krw is not None:
+        # 국내 거래소 가격 추가 (수동 ETH/KRW가 설정되어 있으면 수동 가격 사용, 아니면 실제 가격 사용)
+        if use_manual_eth_krw and self.manual_eth_krw_override is not None:
+            # 수동 ETH/KRW 가격 사용
+            prices.append(('upbit (manual)', self.manual_eth_krw_override))
+        elif upbit_eth_krw is not None:
+            # 실제 Upbit ETH/KRW 가격 사용
             prices.append(('upbit', upbit_eth_krw))
         
         # 역산된 USDT/KRW 가격 (역산 모드에서 사용)
@@ -160,14 +169,21 @@ class Oracle:
             # 1. 각 해외 거래소의 ETH/USDT로부터 역산된 USDT/KRW 계산
             # 2. 역산된 USDT/KRW들의 평균 계산
             # 3. 평균 USDT/KRW를 사용하여 해외 거래소 가격 변환
-            if upbit_eth_krw is not None:
+            # 역산에 사용할 Upbit ETH/KRW 가격 결정 (수동 가격이 있으면 수동 가격 사용)
+            upbit_eth_krw_for_inverse = None
+            if use_manual_eth_krw and self.manual_eth_krw_override is not None:
+                upbit_eth_krw_for_inverse = self.manual_eth_krw_override
+            else:
+                upbit_eth_krw_for_inverse = upbit_eth_krw
+            
+            if upbit_eth_krw_for_inverse is not None:
                 inverse_usdt_krw_list = []
                 
                 # 각 해외 거래소별로 역산된 USDT/KRW 계산
                 for exchange_name, eth_usdt_price in overseas_eth_usdt.items():
                     if eth_usdt_price is not None:
                         inverse_usdt_krw = self.convert_domestic_price_to_usdt(
-                            upbit_eth_krw, eth_usdt_price
+                            upbit_eth_krw_for_inverse, eth_usdt_price
                         )
                         inverse_usdt_krw_list.append(inverse_usdt_krw)
                 
@@ -219,6 +235,14 @@ class Oracle:
     def get_manual_usdt_krw(self) -> Optional[float]:
         """테스트용 USDT/KRW 가격 가져오기"""
         return self.manual_usdt_krw_override
+    
+    def set_manual_eth_krw(self, price: Optional[float]):
+        """테스트용 ETH/KRW 가격 수동 설정"""
+        self.manual_eth_krw_override = price
+    
+    def get_manual_eth_krw(self) -> Optional[float]:
+        """테스트용 ETH/KRW 가격 가져오기"""
+        return self.manual_eth_krw_override
 
 
 if __name__ == '__main__':

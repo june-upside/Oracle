@@ -1,5 +1,6 @@
 // 전역 변수
 let manualUsdtKrwPrice = null;
+let manualEthKrwPrice = null;
 let priceChart = null;
 let socket = null;
 
@@ -58,22 +59,32 @@ function formatExchangeName(name) {
 
 // 웹소켓 연결 설정
 function setupWebSocket() {
-    socket = io();
+    socket = io({
+        transports: ['websocket', 'polling'], // WebSocket 우선, 폴백 지원
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+    });
     
     socket.on('connect', () => {
-        console.log('웹소켓 연결됨');
+        console.log('✅ 웹소켓 연결됨 - 실시간 업데이트 활성화');
     });
     
     socket.on('disconnect', () => {
-        console.log('웹소켓 연결 해제됨');
+        console.log('⚠️ 웹소켓 연결 해제됨');
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+        console.log(`🔄 웹소켓 재연결됨 (시도 ${attemptNumber})`);
     });
     
     socket.on('price_update', (data) => {
+        // 즉시 대시보드 업데이트 (지연 없음)
         updateDashboard(data);
     });
     
     socket.on('connect_error', (error) => {
-        console.error('웹소켓 연결 오류:', error);
+        console.error('❌ 웹소켓 연결 오류:', error);
         // 웹소켓 연결 실패 시 HTTP 폴링으로 폴백
         console.log('HTTP 폴링으로 전환합니다...');
         setupHttpPolling();
@@ -95,8 +106,8 @@ function setupHttpPolling() {
     // 즉시 한 번 실행
     fetchData();
     
-    // 1초마다 폴링
-    setInterval(fetchData, 1000);
+    // 0.5초마다 폴링 (웹소켓 업데이트 주기와 동일)
+    setInterval(fetchData, 500);
 }
 
 // 차트 초기화
@@ -104,12 +115,35 @@ function initPriceChart() {
     const ctx = document.getElementById('priceChart').getContext('2d');
     const isDark = document.body.classList.contains('dark-mode');
     
-    // 다크모드에 따른 초기 색상 설정
-    const primaryColor = isDark ? '#e0e0e0' : '#1a1a1a';
-    const secondaryColor = isDark ? '#b0b0b0' : '#666';
-    const gridColor = isDark ? '#333' : '#e5e5e5';
-    const textColor = isDark ? '#b0b0b0' : '#1a1a1a';
-    const legendColor = isDark ? '#e0e0e0' : '#1a1a1a';
+    // 다크모드에 따른 색상 설정
+    const primaryColor = isDark ? '#6366f1' : '#4f46e5'; // 인디고 블루
+    const secondaryColor = isDark ? '#3b82f6' : '#2563eb'; // 파란색(남색)
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+    const textColor = isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
+    const legendColor = isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)';
+    
+    // 그라데이션 생성
+    const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+    if (isDark) {
+        gradient1.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+        gradient1.addColorStop(0.5, 'rgba(99, 102, 241, 0.15)');
+        gradient1.addColorStop(1, 'rgba(99, 102, 241, 0)');
+    } else {
+        gradient1.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+        gradient1.addColorStop(0.5, 'rgba(79, 70, 229, 0.1)');
+        gradient1.addColorStop(1, 'rgba(79, 70, 229, 0)');
+    }
+    
+    const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+    if (isDark) {
+        gradient2.addColorStop(0, 'rgba(139, 92, 246, 0.2)');
+        gradient2.addColorStop(0.5, 'rgba(139, 92, 246, 0.1)');
+        gradient2.addColorStop(1, 'rgba(139, 92, 246, 0)');
+    } else {
+        gradient2.addColorStop(0, 'rgba(124, 58, 237, 0.15)');
+        gradient2.addColorStop(0.5, 'rgba(124, 58, 237, 0.08)');
+        gradient2.addColorStop(1, 'rgba(124, 58, 237, 0)');
+    }
     
     priceChart = new Chart(ctx, {
         type: 'line',
@@ -120,20 +154,30 @@ function initPriceChart() {
                     label: '중앙값 가격',
                     data: [],
                     borderColor: primaryColor,
-                    backgroundColor: isDark ? 'rgba(224, 224, 224, 0.1)' : 'rgba(26, 26, 26, 0.1)',
-                    borderWidth: 2,
+                    backgroundColor: gradient1,
+                    borderWidth: 3,
                     fill: true,
-                    tension: 0.4,
+                    tension: 0.5, // 더 매끄러운 곡선
+                    pointRadius: 0, // 포인트 완전히 숨김
+                    pointHoverRadius: 0, // 호버 시에도 포인트 없음
+                    cubicInterpolationMode: 'monotone', // 더 자연스러운 곡선
+                    shadowOffsetX: 0,
+                    shadowOffsetY: 4,
+                    shadowBlur: 10,
+                    shadowColor: isDark ? 'rgba(99, 102, 241, 0.3)' : 'rgba(79, 70, 229, 0.2)',
                 },
                 {
                     label: '업비트 ETH/KRW',
                     data: [],
                     borderColor: secondaryColor,
-                    backgroundColor: isDark ? 'rgba(176, 176, 176, 0.1)' : 'rgba(102, 102, 102, 0.1)',
-                    borderWidth: 1,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
                     fill: false,
-                    tension: 0.4,
-                    borderDash: [5, 5],
+                    tension: 0.5,
+                    pointRadius: 0, // 포인트 완전히 숨김
+                    pointHoverRadius: 0, // 호버 시에도 포인트 없음
+                    borderDash: [8, 4], // 더 긴 점선
+                    cubicInterpolationMode: 'monotone',
                 }
             ]
         },
@@ -141,22 +185,40 @@ function initPriceChart() {
             responsive: true,
             maintainAspectRatio: true,
             aspectRatio: 3,
+            animation: {
+                duration: 400,
+                easing: 'easeOutQuart',
+            },
             plugins: {
                 legend: {
                     display: true,
                     position: 'top',
+                    align: 'end',
                     labels: {
                         font: {
                             family: "'JetBrains Mono', monospace",
-                            size: 12,
+                            size: 11,
+                            weight: '500',
                         },
                         usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 15,
                         color: legendColor,
+                        boxWidth: 12,
+                        boxHeight: 12,
                     }
                 },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
+                    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+                    titleColor: isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
+                    bodyColor: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    displayColors: true,
                     callbacks: {
                         label: function(context) {
                             return context.dataset.label + ': ' + formatCurrency(context.parsed.y);
@@ -164,13 +226,17 @@ function initPriceChart() {
                     },
                     font: {
                         family: "'JetBrains Mono', monospace",
-                    }
+                        size: 11,
+                    },
+                    boxPadding: 6,
                 }
             },
             scales: {
                 x: {
                     grid: {
                         color: gridColor,
+                        drawBorder: false,
+                        lineWidth: 1,
                     },
                     ticks: {
                         font: {
@@ -180,11 +246,18 @@ function initPriceChart() {
                         color: textColor,
                         maxRotation: 45,
                         minRotation: 45,
+                        padding: 8,
+                    },
+                    border: {
+                        display: false,
                     }
                 },
                 y: {
+                    beginAtZero: false,
                     grid: {
                         color: gridColor,
+                        drawBorder: false,
+                        lineWidth: 1,
                     },
                     ticks: {
                         font: {
@@ -192,16 +265,32 @@ function initPriceChart() {
                             size: 10,
                         },
                         color: textColor,
+                        padding: 5,
                         callback: function(value) {
                             return formatNumber(value);
                         }
-                    }
+                    },
+                    border: {
+                        display: false,
+                    },
+                    grace: 0, // 자동 여백 제거
                 }
             },
             interaction: {
                 mode: 'nearest',
                 axis: 'x',
                 intersect: false
+            },
+            elements: {
+                line: {
+                    borderCapStyle: 'round',
+                    borderJoinStyle: 'round',
+                },
+                point: {
+                    radius: 0,
+                    hoverRadius: 0,
+                    pointStyle: false,
+                }
             }
         }
     });
@@ -226,7 +315,89 @@ function updateDashboard(data) {
         priceChart.data.labels = labels;
         priceChart.data.datasets[0].data = history.median_prices || [];
         priceChart.data.datasets[1].data = history.upbit_eth_krw || [];
-        priceChart.update('none'); // 애니메이션 없이 업데이트
+        
+        // 계산 방법에 따라 차트 색상 변경
+        const isDark = document.body.classList.contains('dark-mode');
+        const calculationMethod = oracle_result.calculation_method;
+        const ctx = priceChart.canvas.getContext('2d');
+        const chartArea = priceChart.chartArea;
+        
+        // 그라데이션 생성 (차트 높이에 맞춤)
+        const gradient = ctx.createLinearGradient(0, chartArea ? chartArea.top : 0, 0, chartArea ? chartArea.bottom : 400);
+        
+        if (calculationMethod === 'normal') {
+            // Primary Mode: 초록색
+            if (isDark) {
+                gradient.addColorStop(0, 'rgba(76, 175, 80, 0.3)'); // #4caf50
+                gradient.addColorStop(0.5, 'rgba(76, 175, 80, 0.15)');
+                gradient.addColorStop(1, 'rgba(76, 175, 80, 0)');
+                priceChart.data.datasets[0].borderColor = '#4caf50';
+                priceChart.data.datasets[0].shadowColor = 'rgba(76, 175, 80, 0.3)';
+            } else {
+                gradient.addColorStop(0, 'rgba(76, 175, 80, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(76, 175, 80, 0.1)');
+                gradient.addColorStop(1, 'rgba(76, 175, 80, 0)');
+                priceChart.data.datasets[0].borderColor = '#4caf50';
+                priceChart.data.datasets[0].shadowColor = 'rgba(76, 175, 80, 0.2)';
+            }
+        } else if (calculationMethod === 'inverse') {
+            // Backup Mode: 빨간색
+            if (isDark) {
+                gradient.addColorStop(0, 'rgba(220, 53, 69, 0.3)'); // #dc3545
+                gradient.addColorStop(0.5, 'rgba(220, 53, 69, 0.15)');
+                gradient.addColorStop(1, 'rgba(220, 53, 69, 0)');
+                priceChart.data.datasets[0].borderColor = '#dc3545';
+                priceChart.data.datasets[0].shadowColor = 'rgba(220, 53, 69, 0.3)';
+            } else {
+                gradient.addColorStop(0, 'rgba(220, 53, 69, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(220, 53, 69, 0.1)');
+                gradient.addColorStop(1, 'rgba(220, 53, 69, 0)');
+                priceChart.data.datasets[0].borderColor = '#dc3545';
+                priceChart.data.datasets[0].shadowColor = 'rgba(220, 53, 69, 0.2)';
+            }
+        } else {
+            // 기본 색상 (인디고 블루)
+            if (isDark) {
+                gradient.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+                gradient.addColorStop(0.5, 'rgba(99, 102, 241, 0.15)');
+                gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+                priceChart.data.datasets[0].borderColor = '#6366f1';
+                priceChart.data.datasets[0].shadowColor = 'rgba(99, 102, 241, 0.3)';
+            } else {
+                gradient.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+                gradient.addColorStop(0.5, 'rgba(79, 70, 229, 0.1)');
+                gradient.addColorStop(1, 'rgba(79, 70, 229, 0)');
+                priceChart.data.datasets[0].borderColor = '#4f46e5';
+                priceChart.data.datasets[0].shadowColor = 'rgba(79, 70, 229, 0.2)';
+            }
+        }
+        
+        priceChart.data.datasets[0].backgroundColor = gradient;
+        
+        // Y축 스케일을 데이터 범위에 맞춰 조정 (차이를 더 잘 보이도록)
+        const allPrices = [
+            ...(history.median_prices || []).filter(p => p !== null && p !== undefined && p > 0),
+            ...(history.upbit_eth_krw || []).filter(p => p !== null && p !== undefined && p > 0)
+        ];
+        
+        if (allPrices.length > 0) {
+            const minPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+            const priceRange = maxPrice - minPrice;
+            
+            // 최소한의 여백만 추가 (1% 또는 최소 1000원)
+            const padding = Math.max(priceRange * 0.01, 1000);
+            const suggestedMin = minPrice - padding;
+            const suggestedMax = maxPrice + padding;
+            
+            // Y축 범위를 정확히 설정 (Chart.js의 자동 조정 방지)
+            priceChart.options.scales.y.min = suggestedMin;
+            priceChart.options.scales.y.max = suggestedMax;
+            priceChart.options.scales.y.grace = 0; // 자동 여백 완전히 제거
+        }
+        
+        // 부드러운 애니메이션으로 업데이트
+        priceChart.update('active');
     }
 
     // 중앙값 가격 표시
@@ -237,21 +408,42 @@ function updateDashboard(data) {
         medianPriceEl.querySelector('.price-value').textContent = '-';
     }
     
-    // 업비트 가격과 비교 정보 표시
-    const upbitEthKrw = prices.upbit_eth_krw;
+    // 계산 방법 표시
+    const methodEl = document.getElementById('calculation-method');
+    if (oracle_result.calculation_method === 'normal') {
+        methodEl.textContent = 'Primary Mode';
+        methodEl.style.color = '#4caf50';
+    } else if (oracle_result.calculation_method === 'inverse') {
+        methodEl.textContent = 'Backup Mode';
+        methodEl.style.color = '#dc3545';
+    } else {
+        methodEl.textContent = 'No Data';
+        methodEl.style.color = '#999';
+    }
+    
+    // ETH/KRW 정보 업데이트
+    // Upbit 가격 표시 (수동 가격이 있으면 수동 가격, 없으면 실제 가격)
+    const hasManualEthKrw = oracle_result.price_details && 
+        oracle_result.price_details.some(([name]) => name === 'upbit (manual)');
+    const upbitEthKrwToShow = hasManualEthKrw 
+        ? oracle_result.price_details.find(([name]) => name === 'upbit (manual)')?.[1]
+        : prices.upbit_eth_krw;
+    
+    // 업비트 가격과 비교 정보 표시 (조작된 가격이 있으면 조작된 가격 사용)
     const medianPrice = oracle_result.median_price;
     const priceComparisonEl = document.getElementById('price-comparison');
     const upbitPriceCompareEl = document.getElementById('upbit-price-compare');
     const priceDiffEl = document.getElementById('price-diff');
     const priceDiffPercentEl = document.getElementById('price-diff-percent');
     
-    if (upbitEthKrw !== null && upbitEthKrw !== undefined && medianPrice !== null && medianPrice !== undefined) {
-        // 업비트 가격
-        upbitPriceCompareEl.textContent = `업비트: ${formatCurrency(upbitEthKrw)}`;
+    if (upbitEthKrwToShow !== null && upbitEthKrwToShow !== undefined && medianPrice !== null && medianPrice !== undefined) {
+        // 업비트 가격 (조작된 가격이 있으면 조작된 가격 표시)
+        const upbitLabel = hasManualEthKrw ? '업비트 (조작됨)' : '업비트';
+        upbitPriceCompareEl.textContent = `${upbitLabel}: ${formatCurrency(upbitEthKrwToShow)}`;
         
         // 차이값 계산
-        const diff = medianPrice - upbitEthKrw;
-        const diffPercent = (diff / upbitEthKrw) * 100;
+        const diff = medianPrice - upbitEthKrwToShow;
+        const diffPercent = (diff / upbitEthKrwToShow) * 100;
         
         // 차이값 표시
         const diffSign = diff >= 0 ? '+' : '';
@@ -280,18 +472,22 @@ function updateDashboard(data) {
         priceDiffEl.textContent = '-';
         priceDiffPercentEl.textContent = '';
     }
-
-    // 계산 방법 표시
-    const methodEl = document.getElementById('calculation-method');
-    if (oracle_result.calculation_method === 'normal') {
-        methodEl.textContent = 'Normal Mode';
-        methodEl.style.color = '#4caf50';
+    document.getElementById('upbit-eth-krw-info').textContent = formatCurrency(upbitEthKrwToShow);
+    document.getElementById('median-eth-krw-info').textContent = formatCurrency(oracle_result.median_price);
+    
+    const ethKrwMethodEl = document.getElementById('eth-krw-method');
+    if (hasManualEthKrw) {
+        ethKrwMethodEl.textContent = 'Upbit 수동 조작';
+        ethKrwMethodEl.style.color = '#ffc107';
+    } else if (oracle_result.calculation_method === 'normal') {
+        ethKrwMethodEl.textContent = 'Primary Mode';
+        ethKrwMethodEl.style.color = '#4caf50';
     } else if (oracle_result.calculation_method === 'inverse') {
-        methodEl.textContent = 'Inverse Mode';
-        methodEl.style.color = '#dc3545';
+        ethKrwMethodEl.textContent = 'Backup Mode';
+        ethKrwMethodEl.style.color = '#dc3545';
     } else {
-        methodEl.textContent = 'No Data';
-        methodEl.style.color = '#999';
+        ethKrwMethodEl.textContent = '-';
+        ethKrwMethodEl.style.color = '#999';
     }
 
     // 타임스탬프
@@ -323,6 +519,11 @@ function updateDashboard(data) {
     const inverseContainer = document.getElementById('inverse-usdt-krw-container');
     const originalContainer = document.getElementById('original-usdt-krw-container');
     
+    // USDT/KRW 조작 여부 확인 (original과 실제 업비트 가격이 다르면 조작된 것으로 판단)
+    const isManualUsdtKrw = originalUsdtKrw !== null && 
+        prices.upbit_usdt_krw !== null && 
+        Math.abs(originalUsdtKrw - prices.upbit_usdt_krw) > 0.01;
+    
     if (oracle_result.is_volatile && inverseUsdtKrw !== null && inverseUsdtKrw !== undefined) {
         // 역산 모드: 역산된 USDT/KRW와 원본 가격 표시
         document.getElementById('inverse-usdt-krw').textContent = formatCurrency(inverseUsdtKrw);
@@ -332,6 +533,11 @@ function updateDashboard(data) {
             document.getElementById('original-usdt-krw').textContent = formatCurrency(originalUsdtKrw);
             originalContainer.style.display = 'block';
         }
+    } else if (isManualUsdtKrw) {
+        // USDT/KRW가 조작된 경우 표시
+        document.getElementById('original-usdt-krw').textContent = formatCurrency(originalUsdtKrw);
+        originalContainer.style.display = 'block';
+        inverseContainer.style.display = 'none';
     } else {
         // 정상 모드: 역산 정보 숨기기
         inverseContainer.style.display = 'none';
@@ -469,6 +675,106 @@ async function checkManualPrice() {
     }
 }
 
+// ETH/KRW 게이지 이벤트
+function setupEthKrwGauge() {
+    const gauge = document.getElementById('eth-krw-gauge');
+    const gaugeValueDisplay = document.getElementById('eth-gauge-value-display');
+    const resetBtn = document.getElementById('reset-eth-gauge');
+    const applyBtn = document.getElementById('apply-eth-gauge');
+    const gaugeStatus = document.getElementById('eth-gauge-status');
+
+    // 게이지 값 변경 시 표시 업데이트
+    gauge.addEventListener('input', (e) => {
+        gaugeValueDisplay.textContent = formatNumber(parseFloat(e.target.value));
+    });
+
+    // 리셋 버튼
+    resetBtn.addEventListener('click', async () => {
+        manualEthKrwPrice = null;
+        gaugeStatus.textContent = '자동 모드';
+        gaugeStatus.className = 'gauge-status auto';
+        
+        // 서버에 수동 가격 해제 요청
+        try {
+            const response = await fetch('/api/eth-krw/manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ price: null }),
+            });
+            
+            const result = await response.json();
+            console.log(result.message);
+            
+            // 수동 업데이트 트리거 (서버에서 웹소켓으로 브로드캐스트됨)
+            if (socket && socket.connected) {
+                // 웹소켓 연결된 경우 서버에서 자동으로 업데이트가 브로드캐스트됨
+                // 필요시 수동 업데이트 API 호출
+                fetch('/api/oracle/update', { method: 'POST' });
+            }
+        } catch (error) {
+            console.error('리셋 실패:', error);
+        }
+    });
+
+    // 적용 버튼
+    applyBtn.addEventListener('click', async () => {
+        const price = parseFloat(gauge.value);
+        manualEthKrwPrice = price;
+        gaugeStatus.textContent = `수동 모드: ${formatNumber(price)} KRW`;
+        gaugeStatus.className = 'gauge-status manual';
+        
+        // 서버에 수동 가격 설정 요청
+        try {
+            const response = await fetch('/api/eth-krw/manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ price: price }),
+            });
+            
+            const result = await response.json();
+            console.log(result.message);
+            
+            // 수동 업데이트 트리거 (서버에서 웹소켓으로 브로드캐스트됨)
+            if (socket && socket.connected) {
+                // 웹소켓 연결된 경우 서버에서 자동으로 업데이트가 브로드캐스트됨
+                // 필요시 수동 업데이트 API 호출
+                fetch('/api/oracle/update', { method: 'POST' });
+            }
+        } catch (error) {
+            console.error('적용 실패:', error);
+        }
+    });
+
+    // 초기 수동 가격 상태 확인
+    checkManualEthPrice();
+}
+
+// ETH/KRW 수동 가격 상태 확인
+async function checkManualEthPrice() {
+    try {
+        const response = await fetch('/api/eth-krw/manual');
+        const data = await response.json();
+        
+        if (data.manual_price !== null) {
+            manualEthKrwPrice = data.manual_price;
+            const gauge = document.getElementById('eth-krw-gauge');
+            const gaugeValueDisplay = document.getElementById('eth-gauge-value-display');
+            const gaugeStatus = document.getElementById('eth-gauge-status');
+            
+            gauge.value = data.manual_price;
+            gaugeValueDisplay.textContent = formatNumber(data.manual_price);
+            gaugeStatus.textContent = `수동 모드: ${formatNumber(data.manual_price)} KRW`;
+            gaugeStatus.className = 'gauge-status manual';
+        }
+    } catch (error) {
+        console.error('수동 가격 확인 실패:', error);
+    }
+}
+
 // 다크모드 설정
 function setupDarkMode() {
     const toggleInput = document.getElementById('dark-mode-toggle-input');
@@ -509,26 +815,54 @@ function setupDarkMode() {
 function updateChartColors(isDark) {
     if (!priceChart) return;
     
+    const ctx = priceChart.canvas.getContext('2d');
+    
+    // 그라데이션 재생성
+    const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+    const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+    
     if (isDark) {
-        priceChart.data.datasets[0].borderColor = '#e0e0e0';
-        priceChart.data.datasets[0].backgroundColor = 'rgba(224, 224, 224, 0.1)';
-        priceChart.data.datasets[1].borderColor = '#b0b0b0';
-        priceChart.data.datasets[1].backgroundColor = 'rgba(176, 176, 176, 0.1)';
-        priceChart.options.scales.x.grid.color = '#333';
-        priceChart.options.scales.y.grid.color = '#333';
-        priceChart.options.scales.x.ticks.color = '#b0b0b0';
-        priceChart.options.scales.y.ticks.color = '#b0b0b0';
-        priceChart.options.plugins.legend.labels.color = '#e0e0e0';
+        priceChart.data.datasets[0].borderColor = '#6366f1';
+        gradient1.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+        gradient1.addColorStop(0.5, 'rgba(99, 102, 241, 0.15)');
+        gradient1.addColorStop(1, 'rgba(99, 102, 241, 0)');
+        priceChart.data.datasets[0].backgroundColor = gradient1;
+        priceChart.data.datasets[0].pointHoverBackgroundColor = '#6366f1';
+        priceChart.data.datasets[0].shadowColor = 'rgba(99, 102, 241, 0.3)';
+        
+        priceChart.data.datasets[1].borderColor = '#3b82f6';
+        priceChart.data.datasets[1].pointHoverBackgroundColor = '#3b82f6';
+        
+        priceChart.options.scales.x.grid.color = 'rgba(255, 255, 255, 0.05)';
+        priceChart.options.scales.y.grid.color = 'rgba(255, 255, 255, 0.05)';
+        priceChart.options.scales.x.ticks.color = 'rgba(255, 255, 255, 0.7)';
+        priceChart.options.scales.y.ticks.color = 'rgba(255, 255, 255, 0.7)';
+        priceChart.options.plugins.legend.labels.color = 'rgba(255, 255, 255, 0.9)';
+        priceChart.options.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+        priceChart.options.plugins.tooltip.titleColor = 'rgba(255, 255, 255, 0.9)';
+        priceChart.options.plugins.tooltip.bodyColor = 'rgba(255, 255, 255, 0.8)';
+        priceChart.options.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
     } else {
-        priceChart.data.datasets[0].borderColor = '#1a1a1a';
-        priceChart.data.datasets[0].backgroundColor = 'rgba(26, 26, 26, 0.1)';
-        priceChart.data.datasets[1].borderColor = '#666';
-        priceChart.data.datasets[1].backgroundColor = 'rgba(102, 102, 102, 0.1)';
-        priceChart.options.scales.x.grid.color = '#e5e5e5';
-        priceChart.options.scales.y.grid.color = '#e5e5e5';
-        priceChart.options.scales.x.ticks.color = '#1a1a1a';
-        priceChart.options.scales.y.ticks.color = '#1a1a1a';
-        priceChart.options.plugins.legend.labels.color = '#1a1a1a';
+        priceChart.data.datasets[0].borderColor = '#4f46e5';
+        gradient1.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+        gradient1.addColorStop(0.5, 'rgba(79, 70, 229, 0.1)');
+        gradient1.addColorStop(1, 'rgba(79, 70, 229, 0)');
+        priceChart.data.datasets[0].backgroundColor = gradient1;
+        priceChart.data.datasets[0].pointHoverBackgroundColor = '#4f46e5';
+        priceChart.data.datasets[0].shadowColor = 'rgba(79, 70, 229, 0.2)';
+        
+        priceChart.data.datasets[1].borderColor = '#2563eb';
+        priceChart.data.datasets[1].pointHoverBackgroundColor = '#2563eb';
+        
+        priceChart.options.scales.x.grid.color = 'rgba(0, 0, 0, 0.05)';
+        priceChart.options.scales.y.grid.color = 'rgba(0, 0, 0, 0.05)';
+        priceChart.options.scales.x.ticks.color = 'rgba(0, 0, 0, 0.6)';
+        priceChart.options.scales.y.ticks.color = 'rgba(0, 0, 0, 0.6)';
+        priceChart.options.plugins.legend.labels.color = 'rgba(0, 0, 0, 0.9)';
+        priceChart.options.plugins.tooltip.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+        priceChart.options.plugins.tooltip.titleColor = 'rgba(0, 0, 0, 0.9)';
+        priceChart.options.plugins.tooltip.bodyColor = 'rgba(0, 0, 0, 0.8)';
+        priceChart.options.plugins.tooltip.borderColor = 'rgba(0, 0, 0, 0.1)';
     }
     priceChart.update('none');
 }
@@ -536,6 +870,7 @@ function updateChartColors(isDark) {
 // 초기화
 document.addEventListener('DOMContentLoaded', () => {
     setupUsdtKrwGauge();
+    setupEthKrwGauge();
     
     // 다크모드 설정
     setupDarkMode();
