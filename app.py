@@ -40,7 +40,8 @@ user_params = {
     'spread_weights': {'upbit': 1.0, 'bithumb': 1.0, 'coinone': 1.0},
     'volume_weights': {'upbit': 1.0, 'bithumb': 1.0, 'coinone': 1.0},
     'depth_weights': {'upbit': 1.0, 'bithumb': 1.0, 'coinone': 1.0},
-    'aggregation_method': DEFAULT_AGGREGATION_METHOD
+    'aggregation_method': DEFAULT_AGGREGATION_METHOD,
+    'price_overrides': {'upbit': None, 'bithumb': None, 'coinone': None}  # 거래소별 가격 오버라이드
 }
 
 # Lock for thread-safe access
@@ -56,8 +57,12 @@ def collect_exchange_data(coin: str) -> Dict[str, Dict]:
     if ticker:
         spread = upbit.calculate_spread(coin)
         depth = upbit.calculate_depth(coin)
+        # 가격 오버라이드 확인
+        price = user_params['price_overrides'].get('upbit')
+        if price is None:
+            price = ticker.get('price')
         exchange_data['upbit'] = {
-            'price': ticker.get('price'),
+            'price': price,
             'volume': ticker.get('volume'),
             'spread': spread,
             'depth': depth
@@ -68,8 +73,12 @@ def collect_exchange_data(coin: str) -> Dict[str, Dict]:
     if ticker:
         spread = bithumb.calculate_spread(coin)
         depth = bithumb.calculate_depth(coin)
+        # 가격 오버라이드 확인
+        price = user_params['price_overrides'].get('bithumb')
+        if price is None:
+            price = ticker.get('price')
         exchange_data['bithumb'] = {
-            'price': ticker.get('price'),
+            'price': price,
             'volume': ticker.get('volume'),
             'spread': spread,
             'depth': depth
@@ -83,8 +92,12 @@ def collect_exchange_data(coin: str) -> Dict[str, Dict]:
     if ticker:
         spread = coinone.calculate_spread(coin)
         depth = coinone.calculate_depth(coin)
+        # 가격 오버라이드 확인
+        price = user_params['price_overrides'].get('coinone')
+        if price is None:
+            price = ticker.get('price')
         exchange_data['coinone'] = {
-            'price': ticker.get('price'),
+            'price': price,
             'volume': ticker.get('volume'),
             'spread': spread,
             'depth': depth
@@ -241,6 +254,11 @@ def update_params():
     if 'aggregation_method' in data:
         if data['aggregation_method'] in ['average', 'median']:
             user_params['aggregation_method'] = data['aggregation_method']
+    
+    if 'price_overrides' in data:
+        for exchange, price in data['price_overrides'].items():
+            if exchange in user_params['price_overrides']:
+                user_params['price_overrides'][exchange] = price if price is not None and price != '' else None
     
     return jsonify({'status': 'success', 'params': user_params})
 

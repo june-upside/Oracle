@@ -11,7 +11,8 @@ let params = {
     spread_weights: { upbit: 1.0, bithumb: 1.0, coinone: 1.0 },
     volume_weights: { upbit: 1.0, bithumb: 1.0, coinone: 1.0 },
     depth_weights: { upbit: 1.0, bithumb: 1.0, coinone: 1.0 },
-    aggregation_method: 'average'
+    aggregation_method: 'average',
+    price_overrides: { upbit: null, bithumb: null, coinone: null } // 거래소별 가격 오버라이드
 };
 
 // Initialize
@@ -19,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeUI();
     loadParamsFromStorage();
     initializeChart();
+    initializeExchangeCards(); // 거래소 카드 초기화 (한 번만 생성)
     setupEventListeners();
     startPolling();
 });
@@ -307,8 +309,8 @@ function updatePriceDisplay(price, weights) {
     }
 }
 
-// Update exchange prices display
-function updateExchangePrices(data) {
+// Initialize exchange cards (한 번만 실행)
+function initializeExchangeCards() {
     const container = document.getElementById('exchangePrices');
     const exchanges = [
         { key: 'upbit', name: '업비트', class: 'upbit' },
@@ -317,46 +319,254 @@ function updateExchangePrices(data) {
     ];
     
     container.innerHTML = exchanges.map(ex => {
-        const exchangeData = data[ex.key];
-        if (!exchangeData || !exchangeData.price) {
-            return `
-                <div class="exchange-card ${ex.class}">
-                    <div class="exchange-name">${ex.name}</div>
-                    <div class="exchange-price">-</div>
-                    <div class="exchange-weight">
-                        <span class="weight-label">가중치:</span>
-                        <span class="weight-value">-</span>
-                    </div>
-                    <div class="exchange-info">
-                        <span><span>스프레드:</span> <span>-</span></span>
-                        <span><span>거래량:</span> <span>-</span></span>
-                        <span><span>호가 깊이:</span> <span>-</span></span>
-                    </div>
-                </div>
-            `;
-        }
-        
-        const weight = currentWeights[ex.key] || 0;
-        const totalWeight = Object.values(currentWeights).reduce((a, b) => a + b, 0);
-        const weightPercent = totalWeight > 0 ? ((weight / totalWeight) * 100).toFixed(1) : '0.0';
+        const exchangeWeight = params.exchange_weights[ex.key] || 1.0;
+        const spreadWeight = params.spread_weights[ex.key] || 1.0;
+        const volumeWeight = params.volume_weights[ex.key] || 1.0;
+        const depthWeight = params.depth_weights[ex.key] || 1.0;
+        const priceOverride = params.price_overrides[ex.key];
+        const isPriceOverridden = priceOverride !== null && priceOverride !== undefined;
         
         return `
-            <div class="exchange-card ${ex.class}">
-                <div class="exchange-name">${ex.name}</div>
-                <div class="exchange-price">${formatPrice(exchangeData.price)}</div>
-                <div class="exchange-weight">
-                    <span class="weight-label">가중치:</span>
-                    <span class="weight-value">${formatNumber(weight)}</span>
-                    <span class="weight-percent">(${weightPercent}%)</span>
+            <div class="exchange-card ${ex.class}" id="exchange-card-${ex.key}">
+                <div class="exchange-display" id="exchange-display-${ex.key}">
+                    <div class="exchange-header">
+                        <div>
+                            <div class="exchange-name">${ex.name}</div>
+                            <div class="exchange-price" id="exchange-price-${ex.key}">
+                                <span id="price-value-${ex.key}">-</span>
+                                <span id="price-badge-${ex.key}" class="override-badge" style="display: none;">수동</span>
+                            </div>
+                            <div class="exchange-weight">
+                                <span class="weight-label">가중치:</span>
+                                <span class="weight-value" id="weight-value-${ex.key}">-</span>
+                                <span class="weight-percent" id="weight-percent-${ex.key}"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="exchange-info" id="exchange-info-${ex.key}">
+                        <span><span>스프레드:</span> <span id="spread-${ex.key}">-</span></span>
+                        <span><span>거래량:</span> <span id="volume-${ex.key}">-</span></span>
+                        <span><span>호가 깊이:</span> <span id="depth-${ex.key}">-</span></span>
+                    </div>
                 </div>
-                <div class="exchange-info">
-                    <span><span>스프레드:</span> <span>${formatNumber(exchangeData.spread)}%</span></span>
-                    <span><span>거래량:</span> <span>${formatVolume(exchangeData.volume)}</span></span>
-                    <span><span>호가 깊이:</span> <span>${formatNumber(exchangeData.depth)}</span></span>
+                <div class="exchange-params" id="params-${ex.key}">
+                    <div class="exchange-param-control">
+                        <label>가격 오버라이드</label>
+                        <div class="price-override-control">
+                            <input type="number" 
+                                   class="price-override-input" 
+                                   data-exchange="${ex.key}"
+                                   id="price-override-input-${ex.key}"
+                                   placeholder="자동"
+                                   value="${priceOverride !== null && priceOverride !== undefined ? priceOverride : ''}"
+                                   step="1"
+                                   onchange="updatePriceOverride('${ex.key}', this.value)"
+                                   oninput="updatePriceOverrideInput('${ex.key}', this.value)">
+                            <button class="clear-override-btn" 
+                                    onclick="clearPriceOverride('${ex.key}')"
+                                    ${isPriceOverridden ? '' : 'style="display: none;"'}
+                                    id="clearBtn-${ex.key}">
+                                초기화
+                            </button>
+                        </div>
+                        <div class="price-override-hint">
+                            <small>값을 입력하면 해당 가격으로 고정됩니다. 비우면 자동으로 복원됩니다.</small>
+                        </div>
+                    </div>
+                    <div class="exchange-param-control">
+                        <label>거래소 가중치</label>
+                        <div class="weight-control-row">
+                            <input type="range" 
+                                   class="weight-slider" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${exchangeWeight}"
+                                   data-param="exchange_weights"
+                                   data-key="${ex.key}"
+                                   oninput="updateExchangeParam('${ex.key}', 'exchange_weights', this.value)">
+                            <input type="number" 
+                                   class="weight-input" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${exchangeWeight}"
+                                   data-param="exchange_weights"
+                                   data-key="${ex.key}"
+                                   onchange="updateExchangeParam('${ex.key}', 'exchange_weights', this.value)">
+                        </div>
+                    </div>
+                    <div class="exchange-param-control">
+                        <label>스프레드 가중치 계수</label>
+                        <div class="weight-control-row">
+                            <input type="range" 
+                                   class="weight-slider" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${spreadWeight}"
+                                   data-param="spread_weights"
+                                   data-key="${ex.key}"
+                                   oninput="updateExchangeParam('${ex.key}', 'spread_weights', this.value)">
+                            <input type="number" 
+                                   class="weight-input" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${spreadWeight}"
+                                   data-param="spread_weights"
+                                   data-key="${ex.key}"
+                                   onchange="updateExchangeParam('${ex.key}', 'spread_weights', this.value)">
+                        </div>
+                    </div>
+                    <div class="exchange-param-control">
+                        <label>거래량 가중치 계수</label>
+                        <div class="weight-control-row">
+                            <input type="range" 
+                                   class="weight-slider" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${volumeWeight}"
+                                   data-param="volume_weights"
+                                   data-key="${ex.key}"
+                                   oninput="updateExchangeParam('${ex.key}', 'volume_weights', this.value)">
+                            <input type="number" 
+                                   class="weight-input" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${volumeWeight}"
+                                   data-param="volume_weights"
+                                   data-key="${ex.key}"
+                                   onchange="updateExchangeParam('${ex.key}', 'volume_weights', this.value)">
+                        </div>
+                    </div>
+                    <div class="exchange-param-control">
+                        <label>호가 깊이 가중치 계수</label>
+                        <div class="weight-control-row">
+                            <input type="range" 
+                                   class="weight-slider" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${depthWeight}"
+                                   data-param="depth_weights"
+                                   data-key="${ex.key}"
+                                   oninput="updateExchangeParam('${ex.key}', 'depth_weights', this.value)">
+                            <input type="number" 
+                                   class="weight-input" 
+                                   min="0" 
+                                   max="2" 
+                                   step="0.01" 
+                                   value="${depthWeight}"
+                                   data-param="depth_weights"
+                                   data-key="${ex.key}"
+                                   onchange="updateExchangeParam('${ex.key}', 'depth_weights', this.value)">
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
+}
+
+// Update exchange prices display (가격 표시 부분만 업데이트)
+function updateExchangePrices(data) {
+    const exchanges = [
+        { key: 'upbit', name: '업비트', class: 'upbit' },
+        { key: 'bithumb', name: '빗썸', class: 'bithumb' },
+        { key: 'coinone', name: '코인원', class: 'coinone' }
+    ];
+    
+    exchanges.forEach(ex => {
+        const exchangeData = data[ex.key];
+        const priceEl = document.getElementById(`price-value-${ex.key}`);
+        const priceBadgeEl = document.getElementById(`price-badge-${ex.key}`);
+        const priceContainerEl = document.getElementById(`exchange-price-${ex.key}`);
+        const weightValueEl = document.getElementById(`weight-value-${ex.key}`);
+        const weightPercentEl = document.getElementById(`weight-percent-${ex.key}`);
+        const spreadEl = document.getElementById(`spread-${ex.key}`);
+        const volumeEl = document.getElementById(`volume-${ex.key}`);
+        const depthEl = document.getElementById(`depth-${ex.key}`);
+        const priceOverrideInput = document.getElementById(`price-override-input-${ex.key}`);
+        
+        if (!priceEl || !priceContainerEl) return; // 카드가 아직 초기화되지 않음
+        
+        // 가격 오버라이드 값 읽기 (입력 중인 값 유지)
+        if (priceOverrideInput) {
+            const currentValue = priceOverrideInput.value.trim();
+            if (currentValue !== '') {
+                const numValue = parseFloat(currentValue);
+                if (!isNaN(numValue)) {
+                    params.price_overrides[ex.key] = numValue;
+                }
+            }
+        }
+        
+        const priceOverride = params.price_overrides[ex.key];
+        const isPriceOverridden = priceOverride !== null && priceOverride !== undefined;
+        
+        if (!exchangeData || !exchangeData.price) {
+            // 데이터가 없는 경우
+            const displayPrice = isPriceOverridden ? priceOverride : null;
+            if (priceEl) {
+                priceEl.textContent = displayPrice ? formatPrice(displayPrice) : '-';
+            }
+            if (priceContainerEl) {
+                priceContainerEl.classList.toggle('price-overridden', isPriceOverridden);
+            }
+            if (priceBadgeEl) {
+                priceBadgeEl.style.display = isPriceOverridden ? 'inline' : 'none';
+            }
+            if (weightValueEl) weightValueEl.textContent = '-';
+            if (weightPercentEl) weightPercentEl.textContent = '';
+            if (spreadEl) spreadEl.textContent = '-';
+            if (volumeEl) volumeEl.textContent = '-';
+            if (depthEl) depthEl.textContent = '-';
+            
+            // placeholder 업데이트
+            if (priceOverrideInput) {
+                priceOverrideInput.placeholder = '자동';
+            }
+        } else {
+            // 데이터가 있는 경우
+            const weight = currentWeights[ex.key] || 0;
+            const totalWeight = Object.values(currentWeights).reduce((a, b) => a + b, 0);
+            const weightPercent = totalWeight > 0 ? ((weight / totalWeight) * 100).toFixed(1) : '0.0';
+            
+            const displayPrice = isPriceOverridden ? priceOverride : exchangeData.price;
+            
+            // 가격 업데이트
+            if (priceEl) {
+                priceEl.textContent = formatPrice(displayPrice);
+            }
+            if (priceContainerEl) {
+                priceContainerEl.classList.toggle('price-overridden', isPriceOverridden);
+            }
+            if (priceBadgeEl) {
+                priceBadgeEl.style.display = isPriceOverridden ? 'inline' : 'none';
+            }
+            
+            // 가중치 업데이트
+            if (weightValueEl) {
+                weightValueEl.textContent = formatNumber(weight);
+            }
+            if (weightPercentEl) {
+                weightPercentEl.textContent = `(${weightPercent}%)`;
+            }
+            
+            // 정보 업데이트
+            if (spreadEl) spreadEl.textContent = `${formatNumber(exchangeData.spread)}%`;
+            if (volumeEl) volumeEl.textContent = formatVolume(exchangeData.volume);
+            if (depthEl) depthEl.textContent = formatNumber(exchangeData.depth);
+            
+            // placeholder 업데이트
+            if (priceOverrideInput) {
+                priceOverrideInput.placeholder = `자동 (${formatPrice(exchangeData.price)})`;
+            }
+        }
+    });
 }
 
 // Update params on server
@@ -407,5 +617,79 @@ function formatVolume(volume) {
         return (volume / 1000).toFixed(2) + 'K';
     }
     return volume.toFixed(2);
+}
+
+// Update price override input (while typing)
+function updatePriceOverrideInput(exchangeKey, value) {
+    // 입력 중인 값을 임시로 저장 (업데이트 시 유지)
+    if (value === '' || value === null) {
+        // 빈 값이면 null로 설정하지 않고, 사용자가 입력 중일 수 있으므로 현재 값을 유지
+        return;
+    }
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue)) {
+        params.price_overrides[exchangeKey] = numValue;
+    }
+}
+
+// Update price override (on change/blur)
+function updatePriceOverride(exchangeKey, value) {
+    const numValue = value === '' || value === null ? null : parseFloat(value);
+    params.price_overrides[exchangeKey] = numValue;
+    
+    // Clear button 표시/숨김
+    const clearBtn = document.getElementById(`clearBtn-${exchangeKey}`);
+    if (clearBtn) {
+        clearBtn.style.display = numValue !== null ? 'block' : 'none';
+    }
+    
+    // 가격 표시 업데이트
+    updateParams();
+    updateData(); // 즉시 업데이트
+}
+
+// Clear price override
+function clearPriceOverride(exchangeKey) {
+    params.price_overrides[exchangeKey] = null;
+    
+    // Input 필드 초기화
+    const input = document.querySelector(`input.price-override-input[onchange*="${exchangeKey}"]`);
+    if (input) {
+        input.value = '';
+    }
+    
+    // Clear button 숨김
+    const clearBtn = document.getElementById(`clearBtn-${exchangeKey}`);
+    if (clearBtn) {
+        clearBtn.style.display = 'none';
+    }
+    
+    updateParams();
+    updateData(); // 즉시 업데이트
+}
+
+// Update exchange-specific parameter
+function updateExchangeParam(exchangeKey, paramType, value) {
+    const numValue = parseFloat(value);
+    
+    // Update params object
+    if (!params[paramType]) {
+        params[paramType] = {};
+    }
+    params[paramType][exchangeKey] = numValue;
+    
+    // Sync slider and input
+    const slider = document.querySelector(`input[type="range"][data-param="${paramType}"][data-key="${exchangeKey}"]`);
+    const input = document.querySelector(`input[type="number"][data-param="${paramType}"][data-key="${exchangeKey}"]`);
+    
+    if (slider && slider.value !== value) {
+        slider.value = value;
+    }
+    if (input && input.value !== value) {
+        input.value = value;
+    }
+    
+    // Update server
+    updateParams();
 }
 
