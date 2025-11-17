@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Price Oracle Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Price Oracle Dashboard</h1>
+        </header>
+
+        <div class="main-content">
+            <!-- Coin Selector -->
+            <div class="coin-selector">
+                <label for="coinSelect">코인 선택:</label>
+                <select id="coinSelect">
+                    <option value="BTC">BTC</option>
+                    <option value="ETH">ETH</option>
+                    <option value="SOL">SOL</option>
+                    <option value="XRP">XRP</option>
+                </select>
+            </div>
+
+            <!-- Aggregated Price Display -->
+            <div class="price-display">
+                <div class="price-label">집계 가격</div>
+                <div class="price-value" id="aggregatedPrice">-</div>
+                <div class="price-method" id="aggregationMethod">평균값</div>
+            </div>
+
+            <!-- Exchange Prices -->
+            <div class="exchange-prices" id="exchangePrices">
+                <!-- Will be populated by JavaScript -->
+            </div>
+
+            <!-- Chart -->
+            <div class="chart-container">
+                <canvas id="priceChart"></canvas>
+            </div>
+
+            <!-- Parameter Controls -->
+            <div class="parameter-panel">
+                <h2>파라미터 조작</h2>
+                
+                <!-- Aggregation Method -->
+                <div class="param-section">
+                    <h3>집계 방식</h3>
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="aggregationMethod" value="average" checked>
+                            평균값
+                        </label>
+                        <label>
+                            <input type="radio" name="aggregationMethod" value="median">
+                            중앙값
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Exchange Weights -->
+                <div class="param-section">
+                    <h3>거래소별 가중치</h3>
+                    <div id="exchangeWeights">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Spread Weights -->
+                <div class="param-section">
+                    <h3>스프레드 가중치 계수</h3>
+                    <div id="spreadWeights">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Volume Weights -->
+                <div class="param-section">
+                    <h3>거래량 가중치 계수</h3>
+                    <div id="volumeWeights">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Depth Weights -->
+                <div class="param-section">
+                    <h3>호가 깊이 가중치 계수</h3>
+                    <div id="depthWeights">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+
